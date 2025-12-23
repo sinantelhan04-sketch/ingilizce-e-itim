@@ -1,0 +1,7 @@
+{
+  "name": "YDS/YÖKDİL AI Tutor",
+  "description": "A 30-day academic English curriculum generator and pronunciation coach powered by Gemini AI, specifically designed for Turkish speakers preparing for YDS, YÖKDİL, and TOEFL.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
