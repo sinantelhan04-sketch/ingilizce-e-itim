@@ -197,21 +197,28 @@ export const regeneratePassage = async (currentTheme: string, words: Word[]): Pr
   }
 };
 
-export const getQuickDefinition = async (word: string, contextSentence: string): Promise<{ meaning: string, pronunciation: string }> => {
+export const getQuickDefinition = async (word: string, contextSentence: string): Promise<{ turkish_meaning: string, english_definition: string, pronunciation: string, emoji: string }> => {
   const prompt = `
-    Task: Provide a quick Turkish definition and IPA pronunciation for the word "${word}" based on its context.
-    Context Sentence: "${contextSentence}"
+    Task: Analyze the word "${word}" in this context: "${contextSentence}".
     
-    Return JSON: { "meaning": "Turkish meaning (concise)", "pronunciation": "IPA" }
+    Provide:
+    1. Turkish meaning (concise).
+    2. English definition (simple, clear, A2-B1 level).
+    3. IPA pronunciation.
+    4. A single relevant Emoji representing the word (e.g. apple -> 🍎, think -> 🤔). If abstract, choose the best symbolic match.
+    
+    Return JSON matching the schema.
   `;
 
   const schema: Schema = {
     type: Type.OBJECT,
     properties: {
-      meaning: { type: Type.STRING },
-      pronunciation: { type: Type.STRING }
+      turkish_meaning: { type: Type.STRING },
+      english_definition: { type: Type.STRING },
+      pronunciation: { type: Type.STRING },
+      emoji: { type: Type.STRING }
     },
-    required: ["meaning", "pronunciation"]
+    required: ["turkish_meaning", "english_definition", "pronunciation", "emoji"]
   };
 
   try {
@@ -224,9 +231,9 @@ export const getQuickDefinition = async (word: string, contextSentence: string):
       }
     });
 
-    return JSON.parse(response.text!) as { meaning: string, pronunciation: string };
+    return JSON.parse(response.text!) as { turkish_meaning: string, english_definition: string, pronunciation: string, emoji: string };
   } catch (e) {
-    return { meaning: "Çeviri alınamadı", pronunciation: "" };
+    return { turkish_meaning: "Çeviri alınamadı", english_definition: "Definition unavailable", pronunciation: "", emoji: "❓" };
   }
 };
 

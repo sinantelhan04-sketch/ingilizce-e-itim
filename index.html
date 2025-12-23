@@ -30,6 +30,13 @@
         background: #94a3b8; 
       }
     </style>
+    <script>
+      // Polyfill process.env to prevent runtime crashes in browser environments
+      // where process is not defined (common source of "blank page" errors).
+      if (typeof process === 'undefined') {
+        window.process = { env: {} };
+      }
+    </script>
   <script type="importmap">
 {
   "imports": {
@@ -43,5 +50,6 @@
 </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
