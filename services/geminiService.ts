@@ -2,7 +2,8 @@ import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { DailyLesson, AnalysisResult, Word, Exercise } from "../types";
 
 // Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Using 'as string' to satisfy TypeScript compiler which might see process.env.API_KEY as 'string | undefined'
+const ai = new GoogleGenAI({ apiKey: (process.env.API_KEY as string) });
 
 const LESSON_MODEL = "gemini-3-flash-preview";
 // Switched to gemini-3-flash-preview for audio analysis as native-audio model is Live API only or 404s on generateContent
