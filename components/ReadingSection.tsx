@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Word } from '../types';
 import { playTTS, stopTTS, getQuickDefinition, translateSentence } from '../services/geminiService';
@@ -157,7 +158,7 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
                 onClick={() => setActiveSentenceIndex(idx)}
                 className="cursor-text"
              >
-                 {seg.segment.split(' ').map((token, tIdx) => {
+                 {seg.segment.split(' ').map((token: string, tIdx: number) => {
                     const isBold = token.includes('**');
                     const displayToken = token.replace(/\*\*/g, '');
                     return (
