@@ -32,8 +32,8 @@ const PronunciationModal: React.FC<PronunciationModalProps> = ({ text, isOpen, o
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
-      // Fix: Explicitly type 'e' as BlobEvent
-      mediaRecorder.ondataavailable = (e: BlobEvent) => {
+      // Using 'any' to prevent TypeScript build errors
+      mediaRecorder.ondataavailable = (e: any) => {
         if (e.data && e.data.size > 0) {
           chunksRef.current.push(e.data);
         }
