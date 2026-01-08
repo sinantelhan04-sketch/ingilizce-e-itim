@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { analyzePronunciation, stopTTS } from '../services/geminiService';
 import { AnalysisResult } from '../types';
@@ -31,8 +32,9 @@ const PronunciationModal: React.FC<PronunciationModalProps> = ({ text, isOpen, o
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
+      // Fix: Explicitly type 'e' as BlobEvent
+      mediaRecorder.ondataavailable = (e: BlobEvent) => {
+        if (e.data && e.data.size > 0) {
           chunksRef.current.push(e.data);
         }
       };
@@ -66,15 +68,18 @@ const PronunciationModal: React.FC<PronunciationModalProps> = ({ text, isOpen, o
     const reader = new FileReader();
     reader.readAsDataURL(blob);
     reader.onloadend = async () => {
-      const base64String = (reader.result as string).split(',')[1];
-      try {
-        const analysis = await analyzePronunciation(base64String, text);
-        setResult(analysis);
-      } catch (error) {
-        console.error(error);
-        alert("Analiz sırasında bir hata oluştu.");
-      } finally {
-        setIsAnalyzing(false);
+      const resultString = reader.result as string;
+      if (resultString) {
+          const base64String = resultString.split(',')[1];
+          try {
+            const analysis = await analyzePronunciation(base64String, text);
+            setResult(analysis);
+          } catch (error) {
+            console.error(error);
+            alert("Analiz sırasında bir hata oluştu.");
+          } finally {
+            setIsAnalyzing(false);
+          }
       }
     };
   };

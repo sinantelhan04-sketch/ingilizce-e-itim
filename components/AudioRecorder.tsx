@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { analyzePronunciation, stopTTS } from '../services/geminiService';
 import { AnalysisResult } from '../types';
@@ -21,7 +22,14 @@ const AudioRecorder: React.FC<{ passageText: string }> = ({ passageText }) => {
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
-      mediaRecorder.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
+      
+      // Fix: Explicitly type 'e' as BlobEvent to access 'data' property safely
+      mediaRecorder.ondataavailable = (e: BlobEvent) => {
+          if (e.data && e.data.size > 0) {
+              chunksRef.current.push(e.data);
+          }
+      };
+      
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/wav' });
         handleAnalysis(audioBlob);
@@ -46,13 +54,16 @@ const AudioRecorder: React.FC<{ passageText: string }> = ({ passageText }) => {
     const reader = new FileReader();
     reader.readAsDataURL(blob);
     reader.onloadend = async () => {
-      const base64String = (reader.result as string).split(',')[1];
-      try {
-        const analysis = await analyzePronunciation(base64String, passageText);
-        setResult(analysis);
-        addToast("Analiz tamamlandı", "success");
-      } catch (error) { addToast("Analiz başarısız", "error"); } 
-      finally { setIsAnalyzing(false); }
+      const resultString = reader.result as string;
+      if (resultString) {
+          const base64String = resultString.split(',')[1];
+          try {
+            const analysis = await analyzePronunciation(base64String, passageText);
+            setResult(analysis);
+            addToast("Analiz tamamlandı", "success");
+          } catch (error) { addToast("Analiz başarısız", "error"); } 
+          finally { setIsAnalyzing(false); }
+      }
     };
   };
 
