@@ -1,37 +1,114 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>YDS AI Tutor</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Zero2Hero AI</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet" />
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    primary: "#8B5CF6", // Violet
+                    "primary-dark": "#7C3AED",
+                    secondary: "#0EA5E9", // Sky
+                    "background-light": "#F0F9FF", 
+                    "background-dark": "#0F172A",
+                    // Legacy support
+                    brand: {
+                        50: '#eff6ff',
+                        100: '#dbeafe',
+                        500: '#3b82f6',
+                        600: '#2563eb', 
+                    },
+                    accent: '#F472B6', // Pink
+                    success: '#22C55E',
+                    warning: '#F59E0B',
+                },
+                fontFamily: {
+                    display: ["Fredoka", "sans-serif"],
+                    body: ["Nunito", "sans-serif"],
+                    sans: ["Nunito", "sans-serif"], 
+                },
+                borderRadius: {
+                    DEFAULT: "1rem",
+                    'xl': "1.5rem",
+                    '2xl': "2rem",
+                    '3xl': "2.5rem",
+                },
+                backgroundImage: {
+                    'sky-gradient': 'linear-gradient(180deg, #38BDF8 0%, #3B82F6 100%)',
+                    'night-gradient': 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
+                    'card-gradient': 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                },
+                boxShadow: {
+                    'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+                    'card': '0 10px 40px -10px rgba(0, 0, 0, 0.08)',
+                    'float': '0 20px 40px -5px rgba(0, 0, 0, 0.1)',
+                    '3d': '0 6px 0 rgba(0,0,0,0.15)',
+                    '3d-hover': '0 4px 0 rgba(0,0,0,0.15)',
+                    '3d-active': '0 0 0 rgba(0,0,0,0.15)',
+                    'glow': '0 0 20px rgba(139, 92, 246, 0.3)',
+                }
+            },
+        },
+      }
+    </script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&display=swap');
       body {
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        background-color: #f8fafc; /* Slate-50 */
+        -webkit-font-smoothing: antialiased;
+        min-height: max(884px, 100dvh);
       }
-      .font-serif {
-        font-family: 'Merriweather', serif;
+      
+      /* 3D Button Utility */
+      .btn-3d {
+        transition: all 0.1s;
+        transform: translateY(0);
+        box-shadow: 0 6px 0 rgba(0,0,0,0.15);
       }
-      /* Custom Scrollbar for corporate feel */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+      .btn-3d:hover {
+        transform: translateY(2px);
+        box-shadow: 0 4px 0 rgba(0,0,0,0.15);
       }
-      ::-webkit-scrollbar-track {
-        background: #f1f5f9; 
+      .btn-3d:active {
+        transform: translateY(6px);
+        box-shadow: 0 0 0 rgba(0,0,0,0);
       }
-      ::-webkit-scrollbar-thumb {
-        background: #cbd5e1; 
-        border-radius: 4px;
+
+      /* Animations */
+      @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+        100% { transform: translateY(0px); }
       }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; 
+      .animate-float { animation: float 6s ease-in-out infinite; }
+      
+      @keyframes float-cloud {
+        0% { transform: translateX(0); }
+        50% { transform: translateX(20px); }
+        100% { transform: translateX(0); }
       }
+      .animate-cloud { animation: float-cloud 8s ease-in-out infinite; }
+
+      .dotted-path {
+        stroke: rgba(255, 255, 255, 0.5);
+        stroke-width: 8;
+        stroke-dasharray: 15, 15;
+        fill: none;
+        stroke-linecap: round;
+        filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
+      }
+
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
     <script>
-      // Polyfill process to avoid "ReferenceError: process is not defined" in browser
       window.process = { env: {} };
     </script>
   <script type="importmap">

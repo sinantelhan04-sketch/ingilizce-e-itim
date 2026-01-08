@@ -1,6 +1,6 @@
 {
-  "name": "YDS/YÖKDİL AI Tutor",
-  "description": "A 30-day academic English curriculum generator and pronunciation coach powered by Gemini AI, specifically designed for Turkish speakers preparing for YDS, YÖKDİL, and TOEFL.",
+  "name": "Zero2Hero English AI",
+  "description": "A 30-day comprehensive English curriculum taking you from absolute beginner (A1) to advanced (C1) using Gemini AI. Features daily lessons, grammar points, pronunciation coaching, and interactive exercises.",
   "requestFramePermissions": [
     "microphone"
   ]

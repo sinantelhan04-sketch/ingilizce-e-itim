@@ -1,15 +1,17 @@
+
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
-import { DailyLesson, AnalysisResult, Word, Exercise } from "../types";
+import { DailyLesson, AnalysisResult, Word, Exercise, WritingAnalysisResult } from "../types";
 
 // Initialize Gemini Client
-// Using 'as string' to satisfy TypeScript compiler which might see process.env.API_KEY as 'string | undefined'
 const ai = new GoogleGenAI({ apiKey: (process.env.API_KEY as string) });
 
 const LESSON_MODEL = "gemini-3-flash-preview";
-// Switched to gemini-3-flash-preview for audio analysis as native-audio model is Live API only or 404s on generateContent
 const AUDIO_MODEL = "gemini-3-flash-preview"; 
 const TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const IMAGE_MODEL = "gemini-2.5-flash-image";
+
+// Cache version key to invalidate old data if structure changes
+const CACHE_VERSION = "v2_mondly";
 
 const lessonSchema: Schema = {
   type: Type.OBJECT,
@@ -34,26 +36,57 @@ const lessonSchema: Schema = {
         required: ["word", "ipa", "type", "turkish_meaning", "definition", "synonym", "antonym", "example_sentence"]
       },
     },
+    collocations: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          phrase: { type: Type.STRING },
+          meaning: { type: Type.STRING },
+        },
+        required: ["phrase", "meaning"]
+      }
+    },
+    grammar_point: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        explanation: { type: Type.STRING },
+        example: { type: Type.STRING },
+      },
+      required: ["title", "explanation", "example"]
+    },
     reading_passage: { type: Type.STRING },
+    conversation_scenario: {
+      type: Type.OBJECT,
+      properties: {
+        setting: { type: Type.STRING },
+        user_role: { type: Type.STRING },
+        ai_role: { type: Type.STRING },
+        objective: { type: Type.STRING },
+        starter_message: { type: Type.STRING },
+        suggested_replies: { type: Type.ARRAY, items: { type: Type.STRING } }
+      },
+      required: ["setting", "user_role", "ai_role", "objective", "starter_message", "suggested_replies"]
+    },
     exercises: {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
         properties: {
           id: { type: Type.INTEGER },
-          type: { type: Type.STRING, enum: ["fill-in-blank", "matching"] },
+          type: { type: Type.STRING, enum: ["multiple-choice"] },
           question: { type: Type.STRING },
           options: { type: Type.ARRAY, items: { type: Type.STRING } },
           answer: { type: Type.STRING },
         },
-        required: ["id", "type", "question", "answer"]
+        required: ["id", "type", "question", "options", "answer"]
       },
     },
   },
-  required: ["day", "difficulty_level", "theme", "target_words", "reading_passage", "exercises"],
+  required: ["day", "difficulty_level", "theme", "target_words", "collocations", "grammar_point", "reading_passage", "conversation_scenario", "exercises"],
 };
 
-// Schema for just regenerating passage and exercises
 const regenerationSchema: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -64,46 +97,98 @@ const regenerationSchema: Schema = {
         type: Type.OBJECT,
         properties: {
           id: { type: Type.INTEGER },
-          type: { type: Type.STRING, enum: ["fill-in-blank", "matching"] },
+          type: { type: Type.STRING, enum: ["multiple-choice"] },
           question: { type: Type.STRING },
           options: { type: Type.ARRAY, items: { type: Type.STRING } },
           answer: { type: Type.STRING },
         },
-        required: ["id", "type", "question", "answer"]
+        required: ["id", "type", "question", "options", "answer"]
       },
     },
   },
   required: ["reading_passage", "exercises"],
 };
 
-export const generateLesson = async (day: number): Promise<DailyLesson> => {
-  const difficultyPercent = Math.min(100, day * 3 + 10); // Starts at ~13%, ends at 100%
-  
-  // Dynamic complexity instruction based on day
-  let structureInstruction = "";
-  if (day <= 10) {
-    structureInstruction = "EXTREMELY IMPORTANT: Use simple Subject-Verb-Object sentence structures. Avoid complex relative clauses, passive voice, or long sentences. Keep it very clear and easy to read (A2/B1 level syntax), even if the vocabulary is academic.";
-  } else if (day <= 20) {
-    structureInstruction = "Use moderate sentence structures (B2 level). Mix simple and compound sentences.";
-  } else {
-    structureInstruction = "Use advanced, complex sentence structures (C1 level) typical of academic journals.";
+// Helper to determine curriculum configuration based on Selected Level
+const getLevelConfig = (level: string) => {
+    switch (level) {
+        case 'A1':
+            return {
+                wordCount: "60-80",
+                structure: "Very simple sentences (SVO). Present Simple tense dominance.",
+                themeFocus: "Daily routines, family, home, basic needs."
+            };
+        case 'A2':
+            return {
+                wordCount: "80-100",
+                structure: "Simple and compound sentences connected with 'and', 'but'. Past Simple.",
+                themeFocus: "Travel, shopping, local geography, work."
+            };
+        case 'B1':
+            return {
+                wordCount: "100-130",
+                structure: "Cohesive paragraphs. Use of future forms, modals, and simple complex sentences.",
+                themeFocus: "Experiences, dreams, hopes, events, basic current affairs."
+            };
+        case 'B2':
+            return {
+                wordCount: "140-160",
+                structure: "Complex sentences with relative clauses. Present Perfect. Clear argumentation.",
+                themeFocus: "Abstract topics, technical discussions, social issues."
+            };
+        case 'C1':
+            return {
+                wordCount: "160-200",
+                structure: "Sophisticated academic structure. Passive voice, inversion, advanced connectors.",
+                themeFocus: "Academic research, philosophy, global economics."
+            };
+        default:
+            return {
+                wordCount: "100-120",
+                structure: "Standard intermediate structure.",
+                themeFocus: "General interest."
+            };
+    }
+};
+
+export const generateLesson = async (day: number, userLevel: string = "A1"): Promise<DailyLesson> => {
+  // 1. Check LocalStorage Cache
+  const cacheKey = `yds_lesson_${userLevel}_${day}_${CACHE_VERSION}`;
+  const cachedData = localStorage.getItem(cacheKey);
+
+  if (cachedData) {
+      try {
+          console.log("Serving lesson from cache");
+          return JSON.parse(cachedData) as DailyLesson;
+      } catch (e) {
+          console.warn("Cache parse error, fetching new data");
+          localStorage.removeItem(cacheKey);
+      }
   }
 
+  const config = getLevelConfig(userLevel);
+  
   const prompt = `
-    Role: You are an expert AI English tutor specialized in YDS, YÖKDİL, and TOEFL for Turkish speakers.
-    Task: Create a structured lesson for Day ${day} of a 30-day curriculum.
+    Role: Expert English Teacher.
+    Target Audience: Student at **${userLevel}** level.
+    Day: ${day}/30.
     
-    Requirements:
-    1. Difficulty: Day ${day}/30 (approx ${difficultyPercent}% difficulty). Scale from A2 (Day 1) to C1 (Day 30).
-    2. Theme: Choose a random academic theme (Science, History, Environment, Medicine, or Technology).
-    3. Target Words: 10 advanced academic words suitable for the theme.
-    4. Reading Passage: 100-150 words. Academic tone. MUST include all 10 target words. Wrap target words in **double asterisks** for bolding (e.g. **hypothesis**).
-    5. **Sentence Structure Constraint**: ${structureInstruction}
-    6. Exercises: 
-       - 3 Fill-in-the-blank questions based on the text/vocab.
-       - 2 Meaning matching questions.
+    Task Requirements:
+    1. **Difficulty Level**: Set the 'difficulty_level' field explicitly to "${userLevel}" in the output JSON.
+    2. **Theme**: Specific topic for Day ${day}.
+    3. **Target Words**: 10 essential words for ${userLevel}.
+    4. **Collocations**: 3 useful phrases.
+    5. **Grammar**: One specific grammar point, explained simply.
+    6. **Reading Passage**: ${config.wordCount} words, ${userLevel} level. Wrap target words in **double asterisks**.
+    7. **Conversation Scenario**: Create a roleplay scenario related to the theme.
+       - Setting: Where does it take place?
+       - User Role: Who is the student?
+       - AI Role: Who are you?
+       - Starter Message: The first thing the AI says to start the chat.
+       - Suggested Replies: 3 options for the student to reply with.
+    8. **Exercises**: 4 Multiple Choice questions.
     
-    Output strictly valid JSON matching the schema provided.
+    Output strictly valid JSON matching schema.
   `;
 
   try {
@@ -120,16 +205,68 @@ export const generateLesson = async (day: number): Promise<DailyLesson> => {
     const text = response.text;
     if (!text) throw new Error("No data returned from Gemini");
     
-    return JSON.parse(text) as DailyLesson;
+    const lessonData = JSON.parse(text) as DailyLesson;
+
+    try {
+        localStorage.setItem(cacheKey, JSON.stringify(lessonData));
+    } catch (e) {
+        console.warn("LocalStorage full or disabled, skipping cache save.");
+    }
+
+    return lessonData;
   } catch (error) {
     console.error("Gemini Generation Error:", error);
     throw error;
   }
 };
 
+export const getChatReply = async (history: {role: string, parts: {text: string}[]}[], userLevel: string): Promise<{text: string, suggestions: string[]}> => {
+    const prompt = `
+      You are a roleplay partner in an English learning app.
+      Level: ${userLevel}.
+      Keep responses concise (max 2 sentences).
+      Correct the user gently if they make big mistakes, but prioritize flow.
+      Produce 3 short suggested replies for the user for the NEXT turn.
+      
+      Output JSON: { "text": "Your reply...", "suggestions": ["Option 1", "Option 2", "Option 3"] }
+    `;
+
+    const schema: Schema = {
+        type: Type.OBJECT,
+        properties: {
+            text: { type: Type.STRING },
+            suggestions: { type: Type.ARRAY, items: { type: Type.STRING } }
+        },
+        required: ["text", "suggestions"]
+    };
+
+    try {
+        // Construct the chat history for context
+        const contents = [
+            ...history,
+            { role: 'user', parts: [{ text: prompt }] }
+        ];
+
+        const response = await ai.models.generateContent({
+            model: LESSON_MODEL,
+            contents: contents,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: schema
+            }
+        });
+
+        return JSON.parse(response.text!) as {text: string, suggestions: string[]};
+    } catch (e) {
+        console.error("Chat Error", e);
+        return { text: "I didn't quite catch that. Could you say it again?", suggestions: ["Yes", "No"] };
+    }
+};
+
 export const generateThemeImage = async (theme: string): Promise<string | undefined> => {
-  const prompt = `Create a high-quality, modern, academic illustration representing the theme: "${theme}". 
-  Style: Minimalist, flat vector art, vibrant colors, suitable for an educational app header. No text in the image.`;
+  const prompt = `Create a cute, colorful, 3D cartoon style illustration for an English lesson about: "${theme}". 
+  Style: Mondly/Duolingo style, vibrant colors, soft lighting, 3D isometric or icon style. 
+  White or simple colored background. No text.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -139,12 +276,11 @@ export const generateThemeImage = async (theme: string): Promise<string | undefi
       },
       config: {
         imageConfig: {
-            aspectRatio: "16:9",
+            aspectRatio: "1:1",
         }
       }
     });
 
-    // Extract image from parts
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData && part.inlineData.data) {
         return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -157,22 +293,21 @@ export const generateThemeImage = async (theme: string): Promise<string | undefi
   }
 };
 
-export const regeneratePassage = async (currentTheme: string, words: Word[]): Promise<{ reading_passage: string, exercises: Exercise[] }> => {
+export const regeneratePassage = async (currentTheme: string, words: Word[], userLevel: string = "A1"): Promise<{ reading_passage: string, exercises: Exercise[] }> => {
   const wordList = words.map(w => w.word).join(", ");
+  const config = getLevelConfig(userLevel);
   
   const prompt = `
-    Role: Expert English Tutor.
-    Task: Write a TOTALLY NEW and DIFFERENT reading passage using specific target words.
-    
-    Context:
-    - Theme: ${currentTheme}
-    - Target Words to use (mandatory): ${wordList}
+    Role: Expert Teacher.
+    Task: Rewrite a reading passage on "${currentTheme}".
+    Target Level: ${userLevel}
+    Target Words: ${wordList}
     
     Requirements:
-    1. Reading Passage: Write a NEW paragraph (100-150 words) that is different from the previous one but uses the SAME target words.
-    2. Wrap target words in **double asterisks** (e.g. **hypothesis**).
-    3. Keep sentences clear and readable.
-    4. Exercises: Create 5 NEW exercises (3 fill-in-blank, 2 matching) based on this new text.
+    1. New cohesive paragraph using target words.
+    2. Style: ${config.structure}
+    3. Wrap target words in **double asterisks**.
+    4. 4 NEW Multiple Choice questions.
     
     Output strictly valid JSON matching the schema.
   `;
@@ -200,15 +335,9 @@ export const regeneratePassage = async (currentTheme: string, words: Word[]): Pr
 
 export const getQuickDefinition = async (word: string, contextSentence: string): Promise<{ turkish_meaning: string, english_definition: string, pronunciation: string, emoji: string }> => {
   const prompt = `
-    Task: Analyze the word "${word}" in this context: "${contextSentence}".
-    
-    Provide:
-    1. Turkish meaning (concise).
-    2. English definition (simple, clear, A2-B1 level).
-    3. IPA pronunciation.
-    4. A single relevant Emoji representing the word (e.g. apple -> 🍎, think -> 🤔). If abstract, choose the best symbolic match.
-    
-    Return JSON matching the schema.
+    Task: Explain "${word}" for a Turkish student.
+    Context: "${contextSentence}"
+    Return JSON with Turkish meaning, English definition, IPA, and an Emoji.
   `;
 
   const schema: Schema = {
@@ -239,8 +368,7 @@ export const getQuickDefinition = async (word: string, contextSentence: string):
 };
 
 export const translateSentence = async (sentence: string): Promise<string> => {
-  const prompt = `Translate this academic English sentence to Turkish. Keep it professional and accurate.
-  Sentence: "${sentence}"`;
+  const prompt = `Translate to Turkish: "${sentence}"`;
   
   try {
       const response = await ai.models.generateContent({
@@ -254,27 +382,46 @@ export const translateSentence = async (sentence: string): Promise<string> => {
   }
 };
 
+export const evaluateWriting = async (originalPassage: string, userText: string): Promise<WritingAnalysisResult> => {
+    const prompt = `
+      Evaluate Turkish summary of: "${originalPassage.substring(0, 500)}".
+      Student Summary: "${userText}".
+      
+      Return JSON: score (0-100), feedback (Turkish), missing_points, better_version.
+    `;
+  
+    const schema: Schema = {
+        type: Type.OBJECT,
+        properties: {
+          score: { type: Type.NUMBER },
+          feedback: { type: Type.STRING },
+          missing_points: { type: Type.ARRAY, items: { type: Type.STRING } },
+          better_version: { type: Type.STRING }
+        },
+        required: ["score", "feedback", "missing_points", "better_version"]
+    };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: LESSON_MODEL,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: schema
+            }
+        });
+        
+        return JSON.parse(response.text!) as WritingAnalysisResult;
+    } catch (e) {
+        console.error("Writing Eval Error", e);
+        throw new Error("Değerlendirme yapılamadı");
+    }
+};
+
 export const analyzePronunciation = async (audioBase64: string, passageText: string): Promise<AnalysisResult> => {
   const prompt = `
-    Task: Analyze the user's pronunciation of the provided text.
-    Context: The user is a Turkish speaker learning academic English.
-    Reference Text: "${passageText.substring(0, 500)}..." (Focus on the target academic vocabulary).
-    
-    Instructions:
-    1. Listen to the audio.
-    2. Compare it to standard English pronunciation (RP or General American).
-    3. Identify words that were mispronounced.
-    4. Calculate a SCORE (0-100) based on accuracy, clarity, and fluency.
-    5. Provide specific feedback in Turkish.
-    
-    Output JSON format:
-    {
-      "score": 85,
-      "feedback": "General feedback string in Turkish...",
-      "corrections": [
-        { "original": "word", "pronounced": "phonetic approximation of user error", "note": "Correction tip in Turkish" }
-      ]
-    }
+    Analyze pronunciation. Reference: "${passageText.substring(0, 500)}".
+    Output JSON: score, feedback (Turkish), corrections list.
   `;
 
   try {
@@ -295,7 +442,7 @@ export const analyzePronunciation = async (audioBase64: string, passageText: str
     if (!text) throw new Error("No analysis returned");
     return JSON.parse(text) as AnalysisResult;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Audio Analysis Error:", error);
     return {
       score: 0,
@@ -336,29 +483,61 @@ async function decodeAudioData(
   return buffer;
 }
 
-// Global audio context variable to allow stopping
 let currentAudioContext: AudioContext | null = null;
 let currentSource: AudioBufferSourceNode | null = null;
-let isStopped = false; // Flag to prevent playTTS from starting if stopped
+let isStopped = false; 
 
 export const stopTTS = () => {
   isStopped = true;
   if (currentSource) {
-    try {
-      currentSource.stop();
-    } catch (e) {
-      // Ignore errors if already stopped
-    }
+    try { currentSource.stop(); } catch (e) {}
     currentSource = null;
   }
   if (currentAudioContext && currentAudioContext.state !== 'closed') {
     currentAudioContext.close();
     currentAudioContext = null;
   }
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  window.dispatchEvent(new Event('tts-stopped'));
+};
+
+const playFallbackTTS = (text: string): Promise<void> => {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      resolve();
+      return;
+    }
+    const cleanText = text.trim();
+    if (!cleanText) { resolve(); return; }
+
+    window.speechSynthesis.cancel();
+
+    setTimeout(() => {
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = 'en-US'; 
+        utterance.rate = 0.9;
+        
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Google')) ||
+                               voices.find(v => v.lang === 'en-US') || 
+                               voices.find(v => v.lang.startsWith('en'));
+        
+        if (preferredVoice) utterance.voice = preferredVoice;
+
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve();
+
+        if (isStopped) { resolve(); return; }
+
+        window.speechSynthesis.speak(utterance);
+    }, 50);
+  });
 };
 
 export const playTTS = async (text: string): Promise<void> => {
-  isStopped = false; // Reset on new play request
+  isStopped = false; 
   try {
     const response = await ai.models.generateContent({
       model: TTS_MODEL,
@@ -367,14 +546,13 @@ export const playTTS = async (text: string): Promise<void> => {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            // 'Puck' is often clearer and has good pacing for learners compared to 'Kore'
-            prebuiltVoiceConfig: { voiceName: 'Puck' }, 
+            prebuiltVoiceConfig: { voiceName: 'Fenrir' }, 
           },
         },
       },
     });
 
-    if (isStopped) return; // Check if stopped during fetch
+    if (isStopped) return;
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64Audio) throw new Error("No audio data returned");
@@ -383,7 +561,7 @@ export const playTTS = async (text: string): Promise<void> => {
         currentAudioContext.close();
     }
     
-    if (isStopped) return; // Check again
+    if (isStopped) return;
 
     currentAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     
@@ -418,7 +596,8 @@ export const playTTS = async (text: string): Promise<void> => {
     });
 
   } catch (error) {
-    console.error("TTS Error:", error);
-    throw error;
+    console.warn("Gemini TTS failed, switching to browser fallback.");
+    if (isStopped) return;
+    return playFallbackTTS(text);
   }
 };

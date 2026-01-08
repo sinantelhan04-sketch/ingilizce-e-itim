@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Word } from '../types';
 import { playTTS, stopTTS, getQuickDefinition, translateSentence } from '../services/geminiService';
 import PronunciationModal from './PronunciationModal';
+import { useToast } from './Toast';
 
 interface ReadingSectionProps {
   passage: string;
@@ -22,25 +23,30 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
   const [quickDef, setQuickDef] = useState<QuickDef | null>(null);
   const [loadingDef, setLoadingDef] = useState<string | null>(null);
-
   const [isPlayingPassage, setIsPlayingPassage] = useState(false);
-  const [isPlayingWord, setIsPlayingWord] = useState(false);
-  
-  // Sentence state
   const [activeSentenceIndex, setActiveSentenceIndex] = useState<number | null>(null);
   const [translatedSentenceIndex, setTranslatedSentenceIndex] = useState<number | null>(null);
   const [sentenceTranslation, setSentenceTranslation] = useState<string | null>(null);
   const [loadingTranslation, setLoadingTranslation] = useState(false);
-
-  // Pronunciation Practice State
   const [practiceText, setPracticeText] = useState<string | null>(null);
-
-  // Ref to control the playback loop
+  
+  const { addToast } = useToast();
   const shouldStopRef = useRef(false);
+  const sentenceRefs = useRef<(HTMLSpanElement | null)[]>([]);
 
-  // Stop audio when component unmounts
   useEffect(() => {
+    sentenceRefs.current = [];
+  }, [passage]);
+
+  useEffect(() => {
+    const handleExternalStop = () => {
+      shouldStopRef.current = true;
+      setIsPlayingPassage(false);
+      setActiveSentenceIndex(null);
+    };
+    window.addEventListener('tts-stopped', handleExternalStop);
     return () => {
+      window.removeEventListener('tts-stopped', handleExternalStop);
       shouldStopRef.current = true;
       stopTTS();
     };
@@ -54,30 +60,32 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
   };
 
   const handlePlayPassage = async () => {
-    if (isPlayingPassage) {
-        handleStop();
-        return;
-    }
-
+    if (isPlayingPassage) { handleStop(); return; }
+    
     setIsPlayingPassage(true);
     shouldStopRef.current = false;
     
     try {
       const segmenter = new (Intl as any).Segmenter('en', { granularity: 'sentence' });
       const segments = Array.from(segmenter.segment(passage)) as any[];
-
+      
       for (let i = 0; i < segments.length; i++) {
         if (shouldStopRef.current) break;
-
-        setActiveSentenceIndex(i);
-        const sentence = segments[i].segment;
-        const cleanSentence = sentence.replace(/\*\*/g, '');
         
-        await playTTS(cleanSentence);
+        setActiveSentenceIndex(i);
+        
+        if (sentenceRefs.current[i]) {
+            sentenceRefs.current[i]?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'nearest'
+            });
+        }
+
+        await playTTS(segments[i].segment.replace(/\*\*/g, ''));
       }
     } catch (e) {
-      console.error(e);
-      alert("Metin seslendirilemedi.");
+      addToast("Metin seslendirilemedi.", "error");
     } finally {
       setIsPlayingPassage(false);
       setActiveSentenceIndex(null);
@@ -85,34 +93,17 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
     }
   };
 
-  const handlePlayWord = async (word: string) => {
-    if (isPlayingWord) return;
-    if (isPlayingPassage) handleStop();
-
-    setIsPlayingWord(true);
-    try {
-      await playTTS(word);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsPlayingWord(false);
-    }
-  };
-
   const handleWordClick = async (clickedWord: string, fullSentence: string) => {
     const cleanClicked = clickedWord.replace(/[.,;!?()"]/g, '').toLowerCase();
     const targetWord = words.find(w => w.word.toLowerCase() === cleanClicked);
-    
     if (targetWord) {
         setSelectedWord(targetWord);
         setQuickDef(null);
         return;
     }
-
     setLoadingDef(clickedWord);
     setQuickDef(null);
     setSelectedWord(null);
-
     try {
         const def = await getQuickDefinition(cleanClicked, fullSentence);
         setQuickDef({
@@ -123,7 +114,7 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
             emoji: def.emoji
         });
     } catch (e) {
-        console.error(e);
+        addToast("Kelime analizi yapılamadı", "error");
     } finally {
         setLoadingDef(null);
     }
@@ -135,11 +126,9 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
           setSentenceTranslation(null);
           return;
       }
-
       setTranslatedSentenceIndex(index);
       setSentenceTranslation(null);
       setLoadingTranslation(true);
-
       try {
           const translation = await translateSentence(sentence.replace(/\*\*/g, ''));
           setSentenceTranslation(translation);
@@ -150,97 +139,78 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
       }
   };
 
-  const renderInteractiveSentence = (sentence: string) => {
-    const tokens = sentence.split(' ');
-    
-    return tokens.map((token, index) => {
-      const isBold = token.includes('**');
-      const displayToken = token.replace(/\*\*/g, ''); 
-      
-      return (
-        <React.Fragment key={index}>
-          <span 
-            onClick={(e) => {
-                e.stopPropagation();
-                handleWordClick(displayToken, sentence);
-            }}
-            className={`inline-block cursor-pointer rounded-sm transition-colors duration-150 ${
-                isBold 
-                ? 'font-bold text-blue-900 border-b border-blue-400 hover:bg-blue-50' 
-                : 'hover:bg-slate-100 hover:text-black'
-            } ${loadingDef === displayToken ? 'bg-slate-200 animate-pulse' : ''}`}
-          >
-            {displayToken}
-          </span>
-          {' '}
-        </React.Fragment>
-      );
-    });
-  };
-
   const renderPassage = () => {
      const segmenter = new (Intl as any).Segmenter('en', { granularity: 'sentence' });
      const segments = Array.from(segmenter.segment(passage)) as any[];
-
+     
      return segments.map((seg, idx) => (
-         <span key={idx} className="relative inline">
+         <span 
+            key={idx} 
+            ref={el => { sentenceRefs.current[idx] = el }}
+            className={`relative inline transition-all duration-300 rounded-lg px-1 -mx-1
+                ${activeSentenceIndex === idx 
+                    ? 'bg-primary-50 text-slate-900 ring-1 ring-primary-100' 
+                    : 'hover:bg-slate-50'
+                }`}
+         >
              <span 
                 onClick={() => setActiveSentenceIndex(idx)}
-                className={`transition-colors duration-300 decoration-clone cursor-text ${
-                    activeSentenceIndex === idx 
-                    ? 'bg-yellow-50/80' 
-                    : ''
-                }`}
+                className="cursor-text"
              >
-                 {renderInteractiveSentence(seg.segment)}
+                 {seg.segment.split(' ').map((token, tIdx) => {
+                    const isBold = token.includes('**');
+                    const displayToken = token.replace(/\*\*/g, '');
+                    return (
+                        <React.Fragment key={tIdx}>
+                            <span 
+                                onClick={(e) => { e.stopPropagation(); handleWordClick(displayToken, seg.segment); }}
+                                className={`inline-block cursor-pointer transition-all border-b-[1.5px] mx-[2px]
+                                    ${isBold 
+                                        ? 'font-bold text-primary-600 border-primary-200 hover:bg-primary-600 hover:text-white hover:border-transparent px-1 rounded' 
+                                        : 'border-transparent hover:border-primary-200 text-slate-700'
+                                    } ${loadingDef === displayToken ? 'animate-pulse bg-slate-200' : ''}`}
+                            >{displayToken}</span>{' '}
+                        </React.Fragment>
+                    )
+                 })}
              </span>
              
-             {/* Interaction Popup - More refined look */}
              {activeSentenceIndex === idx && (
-                 <span className="block my-4 p-4 bg-white rounded-lg border border-slate-200 shadow-md animate-in fade-in zoom-in-95 duration-200">
-                     <div className="flex flex-wrap items-center gap-2 mb-2">
-                         <button 
-                            onClick={() => handleTranslateSentence(idx, seg.segment)}
-                            className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors flex items-center gap-1.5"
-                         >
-                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
-                             </svg>
-                             {translatedSentenceIndex === idx ? 'Gizle' : 'Türkçesi'}
-                         </button>
-                         <button 
-                             onClick={() => playTTS(seg.segment.replace(/\*\*/g, ''))}
-                             className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-md hover:bg-slate-100 transition-colors flex items-center gap-1.5"
-                         >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                            </svg>
-                             Dinle
-                         </button>
-                         <button 
-                             onClick={() => setPracticeText(seg.segment.replace(/\*\*/g, ''))}
-                             className="text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-md hover:bg-purple-100 transition-colors flex items-center gap-1.5"
-                         >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                              </svg>
-                             Telaffuz
-                         </button>
+                 <div className="absolute z-30 left-1/2 -translate-x-1/2 -top-14 flex gap-1 animate-in fade-in slide-in-from-bottom-2 bg-slate-900 text-white p-1.5 rounded-2xl shadow-xl shadow-slate-900/20 whitespace-nowrap">
+                     <button onClick={(e) => { e.stopPropagation(); playTTS(seg.segment.replace(/\*\*/g, '')); }} className="px-3 py-1.5 flex items-center gap-2 hover:bg-white/10 rounded-xl transition-colors" title="Dinle">
+                         <span className="material-symbols-rounded text-lg">volume_up</span>
+                         <span className="text-xs font-bold hidden sm:inline">Dinle</span>
+                     </button>
+                     <div className="w-px h-6 bg-white/20 my-auto"></div>
+                     <button onClick={(e) => { e.stopPropagation(); handleTranslateSentence(idx, seg.segment); }} className="px-3 py-1.5 flex items-center gap-2 hover:bg-white/10 rounded-xl transition-colors" title="Çevir">
+                         <span className="material-symbols-rounded text-lg">translate</span>
+                         <span className="text-xs font-bold hidden sm:inline">Çevir</span>
+                     </button>
+                     <div className="w-px h-6 bg-white/20 my-auto"></div>
+                     <button onClick={(e) => { e.stopPropagation(); setPracticeText(seg.segment.replace(/\*\*/g, '')); }} className="px-3 py-1.5 flex items-center gap-2 bg-primary-600 hover:bg-primary-500 rounded-xl transition-colors shadow-lg shadow-primary-500/30" title="Konuş">
+                         <span className="material-symbols-rounded text-lg">mic</span>
+                         <span className="text-xs font-bold hidden sm:inline">Konuş</span>
+                     </button>
+                 </div>
+             )}
+             
+             {translatedSentenceIndex === idx && (
+                 <div className="block my-6 p-4 md:p-6 bg-white border border-slate-100 shadow-float rounded-3xl text-slate-700 relative animate-in zoom-in-95 origin-left">
+                     <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-full bg-primary-50 flex items-center justify-center text-primary-600">
+                             <span className="material-symbols-rounded text-sm">auto_awesome</span>
+                        </div>
+                        <span className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Türkçe Çeviri</span>
                      </div>
-                     
-                     {translatedSentenceIndex === idx && (
-                         <div className="mt-2 text-sm text-slate-700 font-medium border-l-2 border-blue-500 pl-3 py-1">
-                             {loadingTranslation ? (
-                                 <span className="flex items-center gap-2 text-slate-400">
-                                     <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                     Çevriliyor...
-                                 </span>
-                             ) : (
-                                 sentenceTranslation
-                             )}
+                     {loadingTranslation ? (
+                         <div className="flex items-center gap-3 text-slate-400 h-6">
+                             <div className="w-4 h-4 border-2 border-slate-200 border-t-primary-600 rounded-full animate-spin"></div>
+                             <span className="text-sm font-medium">Çevriliyor...</span>
                          </div>
+                     ) : (
+                         <p className="text-base md:text-lg font-medium leading-relaxed text-slate-800">{sentenceTranslation}</p>
                      )}
-                 </span>
+                 </div>
              )}
          </span>
      ));
@@ -249,194 +219,113 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
   const isSaved = (w: string) => savedWords.includes(w.toLowerCase());
 
   return (
-    <div className="p-8 lg:p-10 relative">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 pb-4 border-b border-slate-100 gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <div>
-              <h3 className="text-lg font-bold text-slate-800">Okuma Metni</h3>
-              <p className="text-xs text-slate-500">Akademik Makale</p>
-          </div>
-        </div>
-        
-        <button 
-          onClick={handlePlayPassage}
-          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all border ${
-              isPlayingPassage 
-              ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' 
-              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 hover:text-blue-700'
-          }`}
-        >
-          {isPlayingPassage ? (
-            <>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 animate-pulse" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
-              </svg>
-              Durdur
-            </>
-          ) : (
-            <>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-              </svg>
-              Sesli Oku
-            </>
-          )}
-        </button>
+    <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-12 shadow-dribbble relative overflow-hidden">
+      {/* Decorative Background Blur */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary-50/50 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+
+      <div className="flex flex-col md:flex-row justify-between md:items-center mb-8 md:mb-10 pb-6 border-b border-slate-100 relative z-10 gap-4">
+         <div className="flex items-center gap-4 md:gap-5">
+             <div className="w-12 h-12 md:w-14 md:h-14 rounded-3xl bg-white border border-slate-100 shadow-card flex items-center justify-center text-primary-600">
+                 <span className="material-symbols-rounded text-2xl md:text-3xl">menu_book</span>
+             </div>
+             <div>
+                 <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Okuma Parçası</h2>
+                 <p className="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">İnteraktif Okuyucu</p>
+             </div>
+         </div>
+         <button 
+            onClick={handlePlayPassage} 
+            className={`flex items-center justify-center gap-3 px-6 py-3 rounded-2xl font-bold text-sm transition-all duration-300 group w-full md:w-auto
+            ${isPlayingPassage 
+                ? 'bg-red-50 text-red-500 hover:bg-red-100' 
+                : 'bg-slate-900 text-white hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/20'}`}
+         >
+            <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center transition-colors ${isPlayingPassage ? 'bg-red-100' : 'bg-white/20'}`}>
+                <span className="material-symbols-rounded text-base md:text-lg">{isPlayingPassage ? 'stop' : 'play_arrow'}</span>
+            </div>
+            {isPlayingPassage ? 'Durdur' : 'Metni Dinle'}
+         </button>
       </div>
       
-      <div className="prose prose-lg max-w-none">
-        <p className="text-lg leading-loose text-slate-700 font-serif antialiased">
+      <div className="font-sans leading-[1.8] md:leading-[2.2] text-lg md:text-[1.2rem] text-slate-700 relative z-10 selection:bg-accent-light selection:text-accent">
           {renderPassage()}
-        </p>
       </div>
-      
-      {/* QUICK DEFINITION MODAL */}
+
+      {/* Quick Definition Tooltip - Mobile Bottom Sheet */}
       {quickDef && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" onClick={() => setQuickDef(null)}>
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-slate-900/5" onClick={e => e.stopPropagation()}>
-                {/* Header with Emoji background or large icon */}
-                <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-6 border-b border-slate-100 relative">
-                     <button onClick={() => setQuickDef(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6 bg-slate-900/40 backdrop-blur-sm" onClick={() => setQuickDef(null)}>
+            <div className="bg-white rounded-t-[2rem] md:rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in slide-in-from-bottom-8 md:zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+                <div className="p-6 md:p-8 text-center bg-gradient-to-b from-primary-50 to-white relative">
+                    <button onClick={() => setQuickDef(null)} className="absolute top-4 right-4 md:top-6 md:right-6 text-slate-400 hover:text-slate-600 bg-white rounded-full p-2 shadow-sm transition-all md:hover:rotate-90"><span className="material-symbols-rounded">close</span></button>
+                    <div className="text-6xl md:text-7xl mb-4 md:mb-6 drop-shadow-sm filter grayscale-[0.2]">{quickDef.emoji}</div>
+                    <h3 className="text-2xl md:text-3xl font-bold text-slate-900 capitalize mb-2 tracking-tight">{quickDef.word}</h3>
+                    <p className="text-primary-500 font-bold font-mono bg-primary-50 inline-block px-4 py-1.5 rounded-full text-sm">/{quickDef.pronunciation}/</p>
                     
-                    <div className="flex flex-col items-center text-center">
-                        <div className="text-5xl mb-3 filter drop-shadow-sm leading-normal">{quickDef.emoji}</div>
-                        <h4 className="font-bold text-2xl text-slate-900 capitalize font-serif tracking-tight">{quickDef.word}</h4>
-                        
-                        <div className="flex items-center gap-3 mt-2">
-                             <span className="font-mono text-xs text-slate-500 bg-white px-2 py-1 rounded border border-slate-200 shadow-sm">/{quickDef.pronunciation}/</span>
-                             <div className="flex gap-1">
-                                <button 
-                                    onClick={() => handlePlayWord(quickDef.word)}
-                                    disabled={isPlayingWord}
-                                    className="p-1.5 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
-                                    title="Dinle"
-                                >
-                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
-                                </button>
-                                <button
-                                    onClick={() => onToggleSave(quickDef.word)}
-                                    className={`p-1.5 rounded-full transition-colors ${isSaved(quickDef.word) ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
-                                    title="Kaydet"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill={isSaved(quickDef.word) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                                    </svg>
-                                </button>
-                             </div>
-                        </div>
+                    <div className="flex justify-center gap-3 mt-6 md:mt-8">
+                        <button onClick={() => playTTS(quickDef.word)} className="w-12 h-12 rounded-2xl bg-white border border-slate-100 text-slate-600 hover:border-primary-500 hover:text-primary-500 transition-colors shadow-sm flex items-center justify-center"><span className="material-symbols-rounded text-2xl">volume_up</span></button>
+                        <button 
+                            onClick={() => onToggleSave(quickDef.word)} 
+                            className={`flex-1 px-6 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg ${isSaved(quickDef.word) ? 'bg-green-100 text-green-700 shadow-green-200' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}`}
+                        >
+                            <span className="material-symbols-rounded text-xl">{isSaved(quickDef.word) ? 'bookmark_added' : 'bookmark_add'}</span>
+                            {isSaved(quickDef.word) ? 'Kaydedildi' : 'Kaydet'}
+                        </button>
                     </div>
                 </div>
-
-                <div className="p-5 space-y-4">
-                    {/* Turkish Meaning */}
-                    <div>
-                        <span className="text-[10px] uppercase tracking-wider font-bold text-blue-600 mb-1 block">Türkçe Anlam</span>
-                        <p className="text-lg font-bold text-slate-800 leading-snug">{quickDef.turkish_meaning}</p>
-                    </div>
-
-                    <div className="border-t border-slate-100 pt-3"></div>
-
-                    {/* English Definition */}
-                    <div>
-                        <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1 block">İngilizce Tanım</span>
-                        <p className="text-sm text-slate-600 font-medium leading-relaxed">{quickDef.english_definition}</p>
+                <div className="p-6 md:p-8 pt-0 bg-white">
+                    <div className="bg-slate-50 rounded-3xl p-6 text-center border border-slate-100">
+                         <p className="text-lg md:text-xl font-bold text-slate-900 mb-3">{quickDef.turkish_meaning}</p>
+                         <div className="h-px w-12 bg-slate-200 mx-auto mb-3"></div>
+                         <p className="text-sm text-slate-500 font-medium leading-relaxed">"{quickDef.english_definition}"</p>
                     </div>
                 </div>
             </div>
         </div>
       )}
 
-      {/* TARGET WORD DETAILED MODAL */}
+      {/* Detailed Word Modal - Mobile Full Screen/Sheet */}
       {selectedWord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" onClick={() => setSelectedWord(null)}>
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="bg-slate-900 p-6 relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-4 flex gap-2 z-10">
-                 <button
-                    onClick={() => onToggleSave(selectedWord.word)}
-                    className={`p-2 rounded-md transition-colors ${isSaved(selectedWord.word) ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-300 hover:bg-white/20'}`}
-                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill={isSaved(selectedWord.word) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                    </svg>
-                 </button>
-                 <button onClick={() => setSelectedWord(null)} className="text-slate-400 hover:text-white transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-               </div>
-              
-              <div className="flex flex-col gap-1 relative z-10">
-                <div className="flex items-center gap-3">
-                    <h4 className="text-3xl font-serif font-bold text-white tracking-wide">{selectedWord.word}</h4>
-                    <button 
-                        onClick={() => handlePlayWord(selectedWord.word)}
-                        disabled={isPlayingWord}
-                        className="p-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-50 shadow-lg shadow-blue-900/50"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.983 5.983 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                    <button 
-                        onClick={() => setPracticeText(selectedWord.word)}
-                        className="p-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white transition-colors shadow-lg shadow-purple-900/50"
-                    >
-                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                         </svg>
-                    </button>
+          <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-6 bg-slate-900/60 backdrop-blur-md" onClick={() => setSelectedWord(null)}>
+             <div className="bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in slide-in-from-bottom-12 duration-500 max-h-[90vh] md:max-h-none overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="bg-primary-600 p-8 md:p-10 text-white relative overflow-hidden">
+                    {/* Abstract Shapes */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
+                    <div className="absolute bottom-0 left-0 w-40 h-40 bg-accent opacity-20 rounded-full -ml-10 -mb-10 blur-2xl"></div>
+                    
+                    <button onClick={() => setSelectedWord(null)} className="absolute top-6 right-6 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors backdrop-blur-md"><span className="material-symbols-rounded">close</span></button>
+                    
+                    <span className="inline-block px-3 py-1 rounded-lg bg-black/20 text-[10px] font-bold uppercase tracking-widest mb-6 backdrop-blur-md border border-white/10">{selectedWord.type}</span>
+                    <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">{selectedWord.word}</h2>
+                    <div className="flex items-center gap-3">
+                        <span className="font-mono text-lg opacity-80">/{selectedWord.ipa}/</span>
+                        <button onClick={() => playTTS(selectedWord.word)} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white text-white hover:text-primary-600 transition-all"><span className="material-symbols-rounded text-lg">volume_up</span></button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3 mt-1 text-slate-400 text-sm">
-                    <span className="font-mono">/{selectedWord.ipa}/</span>
-                    <span className="w-1 h-1 bg-slate-500 rounded-full"></span>
-                    <span className="italic">{selectedWord.type}</span>
+                <div className="p-8 md:p-10 space-y-6 md:space-y-8">
+                    <div>
+                        <h3 className="text-2xl font-bold text-slate-900 mb-2">{selectedWord.turkish_meaning}</h3>
+                        <p className="text-slate-600 leading-relaxed font-medium text-lg">{selectedWord.definition}</p>
+                    </div>
+                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 relative">
+                        <div className="absolute -top-3 left-6 bg-white border border-slate-100 px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-400 uppercase tracking-widest">Örnek Cümle</div>
+                        <p className="text-slate-700 italic font-medium">"{selectedWord.example_sentence}"</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                         <div className="p-5 rounded-3xl bg-white border border-slate-100 hover:border-slate-200 hover:shadow-lg transition-all">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Eş Anlamlısı</span>
+                            <span className="font-bold text-slate-800 text-lg">{selectedWord.synonym}</span>
+                         </div>
+                         <div className="p-5 rounded-3xl bg-white border border-slate-100 hover:border-slate-200 hover:shadow-lg transition-all">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Zıt Anlamlısı</span>
+                            <span className="font-bold text-slate-800 text-lg">{selectedWord.antonym}</span>
+                         </div>
+                    </div>
                 </div>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-6 bg-slate-50">
-              <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-                <h5 className="text-xs uppercase tracking-wide text-slate-400 font-bold mb-2">Anlam & Tanım</h5>
-                <p className="text-lg font-bold text-slate-900">{selectedWord.turkish_meaning}</p>
-                <p className="text-slate-600 mt-1 text-sm leading-relaxed">{selectedWord.definition}</p>
-              </div>
-              
-              <div className="bg-white p-4 rounded-lg border-l-4 border-amber-400 shadow-sm">
-                <h5 className="text-xs uppercase tracking-wide text-amber-600 font-bold mb-2">Örnek Kullanım</h5>
-                <p className="text-slate-800 italic font-serif leading-relaxed">"{selectedWord.example_sentence}"</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white p-3 rounded-lg border border-slate-200">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Eş Anlam</span>
-                  <span className="text-slate-700 font-medium text-sm">{selectedWord.synonym}</span>
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-slate-200">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Zıt Anlam</span>
-                  <span className="text-slate-700 font-medium text-sm">{selectedWord.antonym}</span>
-                </div>
-              </div>
-            </div>
+             </div>
           </div>
-        </div>
       )}
 
-      {/* PRONUNCIATION PRACTICE MODAL */}
-      <PronunciationModal 
-        text={practiceText || ""} 
-        isOpen={!!practiceText} 
-        onClose={() => setPracticeText(null)} 
-      />
+      <PronunciationModal text={practiceText || ""} isOpen={!!practiceText} onClose={() => setPracticeText(null)} />
     </div>
   );
 };
