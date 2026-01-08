@@ -20,6 +20,13 @@ interface QuickDef {
   emoji: string;
 }
 
+// Define explicit type for Intl.Segmenter results to avoid 'any' propagation
+interface SegmentData {
+  segment: string;
+  index: number;
+  input: string;
+}
+
 const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWords, onToggleSave }) => {
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
   const [quickDef, setQuickDef] = useState<QuickDef | null>(null);
@@ -68,7 +75,7 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
     
     try {
       const segmenter = new (Intl as any).Segmenter('en', { granularity: 'sentence' });
-      const segments = Array.from(segmenter.segment(passage)) as any[];
+      const segments = Array.from(segmenter.segment(passage)) as SegmentData[];
       
       for (let i = 0; i < segments.length; i++) {
         if (shouldStopRef.current) break;
@@ -142,12 +149,12 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
 
   const renderPassage = () => {
      const segmenter = new (Intl as any).Segmenter('en', { granularity: 'sentence' });
-     const segments = Array.from(segmenter.segment(passage)) as any[];
+     const segments = Array.from(segmenter.segment(passage)) as SegmentData[];
      
      return segments.map((seg, idx) => (
          <span 
             key={idx} 
-            ref={el => { sentenceRefs.current[idx] = el }}
+            ref={(el: HTMLSpanElement | null) => { sentenceRefs.current[idx] = el }}
             className={`relative inline transition-all duration-300 rounded-lg px-1 -mx-1
                 ${activeSentenceIndex === idx 
                     ? 'bg-primary-50 text-slate-900 ring-1 ring-primary-100' 
