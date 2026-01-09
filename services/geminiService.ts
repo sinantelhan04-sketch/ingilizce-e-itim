@@ -2,8 +2,22 @@
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { DailyLesson, AnalysisResult, Word, Exercise, WritingAnalysisResult } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: (process.env.API_KEY as string) });
+// Safe Initialization
+const apiKey = process.env.API_KEY;
+let ai: GoogleGenAI;
+
+if (apiKey && apiKey !== "undefined" && apiKey !== "") {
+    ai = new GoogleGenAI({ apiKey: apiKey });
+} else {
+    console.error("CRITICAL: API Key is missing. The app will fail to generate content.");
+}
+
+const getAiClient = () => {
+    if (!ai) {
+        throw new Error("API Anahtarı bulunamadı. Lütfen Vercel ayarlarından API_KEY eklediğinizden emin olun.");
+    }
+    return ai;
+}
 
 const LESSON_MODEL = "gemini-3-flash-preview";
 const AUDIO_MODEL = "gemini-3-flash-preview"; 
@@ -192,7 +206,8 @@ export const generateLesson = async (day: number, userLevel: string = "A1"): Pro
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+    const response = await client.models.generateContent({
       model: LESSON_MODEL,
       contents: prompt,
       config: {
@@ -241,13 +256,14 @@ export const getChatReply = async (history: {role: string, parts: {text: string}
     };
 
     try {
+        const client = getAiClient();
         // Construct the chat history for context
         const contents = [
             ...history,
             { role: 'user', parts: [{ text: prompt }] }
         ];
 
-        const response = await ai.models.generateContent({
+        const response = await client.models.generateContent({
             model: LESSON_MODEL,
             contents: contents,
             config: {
@@ -270,7 +286,8 @@ export const generateThemeImage = async (theme: string): Promise<string | undefi
 
   const generateWithImagen = async () => {
     try {
-      const response = await ai.models.generateImages({
+      const client = getAiClient();
+      const response = await client.models.generateImages({
         model: 'imagen-3.0-generate-001',
         prompt: prompt,
         config: {
@@ -290,7 +307,8 @@ export const generateThemeImage = async (theme: string): Promise<string | undefi
   };
 
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+    const response = await client.models.generateContent({
       model: IMAGE_MODEL,
       contents: {
         parts: [{ text: prompt }]
@@ -335,7 +353,8 @@ export const regeneratePassage = async (currentTheme: string, words: Word[], use
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+    const response = await client.models.generateContent({
       model: LESSON_MODEL,
       contents: prompt,
       config: {
@@ -374,7 +393,8 @@ export const getQuickDefinition = async (word: string, contextSentence: string):
   };
 
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+    const response = await client.models.generateContent({
       model: LESSON_MODEL,
       contents: prompt,
       config: {
@@ -393,7 +413,8 @@ export const translateSentence = async (sentence: string): Promise<string> => {
   const prompt = `Translate to Turkish: "${sentence}"`;
   
   try {
-      const response = await ai.models.generateContent({
+      const client = getAiClient();
+      const response = await client.models.generateContent({
           model: LESSON_MODEL,
           contents: prompt,
       });
@@ -424,7 +445,8 @@ export const evaluateWriting = async (originalPassage: string, userText: string)
     };
 
     try {
-        const response = await ai.models.generateContent({
+        const client = getAiClient();
+        const response = await client.models.generateContent({
             model: LESSON_MODEL,
             contents: prompt,
             config: {
@@ -447,7 +469,8 @@ export const analyzePronunciation = async (audioBase64: string, passageText: str
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+    const response = await client.models.generateContent({
       model: AUDIO_MODEL,
       contents: {
         parts: [
@@ -561,7 +584,8 @@ const playFallbackTTS = (text: string): Promise<void> => {
 export const playTTS = async (text: string): Promise<void> => {
   isStopped = false; 
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+    const response = await client.models.generateContent({
       model: TTS_MODEL,
       contents: [{ parts: [{ text: text }] }],
       config: {

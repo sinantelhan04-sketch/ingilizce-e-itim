@@ -6,8 +6,8 @@ export default defineConfig(({ mode }) => {
   // Using (process as any).cwd() to bypass "Property 'cwd' does not exist on type 'Process'" error
   const env = loadEnv(mode, (process as any).cwd(), '');
   
-  // Use the key from env
-  const apiKey = env.API_KEY;
+  // Use the key from env, fallback to empty string to prevent build errors
+  const apiKey = env.API_KEY || '';
 
   return {
     plugins: [react()],
