@@ -1,7 +1,5 @@
-// Manual definition for process.env since vite/client is missing
-declare var process: {
-  env: {
+declare namespace NodeJS {
+  interface ProcessEnv {
     API_KEY: string;
-    [key: string]: string | undefined;
   }
-};
+}

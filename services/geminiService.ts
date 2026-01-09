@@ -268,6 +268,27 @@ export const generateThemeImage = async (theme: string): Promise<string | undefi
   Style: Mondly/Duolingo style, vibrant colors, soft lighting, 3D isometric or icon style. 
   White or simple colored background. No text.`;
 
+  const generateWithImagen = async () => {
+    try {
+      const response = await ai.models.generateImages({
+        model: 'imagen-3.0-generate-001',
+        prompt: prompt,
+        config: {
+          numberOfImages: 1,
+          aspectRatio: "1:1",
+          outputMimeType: "image/jpeg"
+        }
+      });
+      const base64Image = response.generatedImages?.[0]?.image?.imageBytes;
+      if (base64Image) {
+        return `data:image/jpeg;base64,${base64Image}`;
+      }
+    } catch (e) {
+      console.error("Imagen fallback failed", e);
+    }
+    return undefined;
+  };
+
   try {
     const response = await ai.models.generateContent({
       model: IMAGE_MODEL,
@@ -286,10 +307,11 @@ export const generateThemeImage = async (theme: string): Promise<string | undefi
         return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
       }
     }
-    return undefined;
+    // If no image part returned, try fallback
+    return await generateWithImagen();
   } catch (error) {
-    console.error("Image Generation Error:", error);
-    return undefined;
+    console.warn("Gemini Image Model failed, switching to Imagen...", error);
+    return await generateWithImagen();
   }
 };
 
