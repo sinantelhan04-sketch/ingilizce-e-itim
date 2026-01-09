@@ -7,7 +7,7 @@ import VocabList from './components/VocabList';
 import ExerciseSection from './components/ExerciseSection';
 import ChatPractice from './components/ChatPractice';
 import WritingExercise from './components/WritingExercise';
-import AudioRecorder from './components/AudioRecorder'; // Imported AudioRecorder
+import AudioRecorder from './components/AudioRecorder';
 import { SkeletonLoader } from './components/SkeletonLoader';
 import { ToastProvider, useToast } from './components/Toast';
 import ProgressMap from './components/ProgressMap';
@@ -18,6 +18,52 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 type ViewMode = 'MAP' | 'LESSON';
 type LessonTab = 'VOCAB' | 'READ' | 'CHAT' | 'QUIZ';
 
+// --- NEW COMPONENT: API KEY ERROR MODAL ---
+const ApiKeyErrorModal = ({ isOpen }: { isOpen: boolean }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/90 backdrop-blur-md p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2rem] max-w-lg w-full p-8 shadow-2xl border border-red-100 text-center relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div>
+                
+                <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <span className="material-symbols-rounded text-4xl text-red-500">key_off</span>
+                </div>
+                
+                <h2 className="text-2xl font-black text-slate-900 mb-2">API Anahtarı Eksik</h2>
+                <p className="text-slate-500 mb-8 font-medium">
+                    Uygulamanın çalışması için Google Gemini API anahtarı gereklidir.
+                </p>
+
+                <div className="space-y-4 text-left bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-8 text-sm">
+                    <div className="flex items-start gap-3">
+                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs">1</span>
+                        <div>
+                            <strong className="block text-slate-800">Eğer Vercel Kullanıyorsan:</strong>
+                            <p className="text-slate-600 mt-1">Settings &gt; Environment Variables kısmına <code className="bg-slate-200 px-1 py-0.5 rounded text-red-600 font-mono">API_KEY</code> ekleyin ve ardından <strong>Deployments</strong> sekmesinden son deploy'u seçip <strong>"Redeploy"</strong> yapın.</p>
+                        </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs">2</span>
+                        <div>
+                            <strong className="block text-slate-800">Eğer Lokaldeysen:</strong>
+                            <p className="text-slate-600 mt-1">Ana dizinde <code className="bg-slate-200 px-1 py-0.5 rounded font-mono">.env</code> dosyası oluşturun ve içine <code className="bg-slate-200 px-1 py-0.5 rounded text-green-700 font-mono">API_KEY=AIza...</code> şeklinde anahtarınızı yapıştırın.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <button 
+                    onClick={() => window.location.reload()}
+                    className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+                >
+                    <span className="material-symbols-rounded">refresh</span>
+                    Sayfayı Yenile
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const AppContent: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('MAP');
   const [currentDay, setCurrentDay] = useState<number>(1);
@@ -27,7 +73,7 @@ const AppContent: React.FC = () => {
   const [lesson, setLesson] = useState<DailyLesson | null>(null);
   const [loading, setLoading] = useState<boolean>(false); 
   const [regenerating, setRegenerating] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [apiKeyError, setApiKeyError] = useState<boolean>(false);
   
   const { addToast } = useToast();
   const { isAuthenticated, user, updateUser } = useAuth();
@@ -74,7 +120,7 @@ const AppContent: React.FC = () => {
 
       if (!lesson || lesson.day !== day || lesson.difficulty_level !== currentLevel) {
         setLoading(true);
-        setError(null);
+        setApiKeyError(false);
         setLesson(null);
         try {
             const data = await generateLesson(day, currentLevel);
@@ -84,9 +130,13 @@ const AppContent: React.FC = () => {
             });
         } catch (err: any) {
             console.error("Lesson Loading Error:", err);
-            setError(`İçerik oluşturulamadı: ${err.message}`);
-            addToast("Ders yüklenirken hata oluştu. Lütfen konsolu kontrol edin.", 'error');
-            setViewMode('MAP'); 
+            
+            if (err.message === "MISSING_API_KEY" || err.message === "INVALID_API_KEY" || err.message.includes("API key")) {
+                setApiKeyError(true);
+            } else {
+                addToast("Bağlantı hatası oluştu. Tekrar deneyin.", 'error');
+                setViewMode('MAP'); 
+            }
         } finally {
             setLoading(false);
         }
@@ -100,12 +150,15 @@ const AppContent: React.FC = () => {
       const data = await regeneratePassage(lesson.theme, lesson.target_words, userLevel);
       setLesson(prev => prev ? { ...prev, reading_passage: data.reading_passage, exercises: data.exercises } : null);
       addToast("Yeni alıştırmalar hazır", 'success');
-    } catch (e) {
-      addToast("Yenileme başarısız", 'error');
+    } catch (e: any) {
+      if (e.message.includes("API key")) setApiKeyError(true);
+      else addToast("Yenileme başarısız", 'error');
     } finally {
       setRegenerating(false);
     }
   };
+
+  if (apiKeyError) return <ApiKeyErrorModal isOpen={true} />;
 
   if (isLevelSelectorOpen || !userLevel) return <LevelSelector onSelect={handleLevelSelect} />;
 
@@ -214,7 +267,6 @@ const AppContent: React.FC = () => {
                                 savedWords={savedWords}
                                 onToggleSave={toggleSaveWord}
                             />
-                             {/* Added AudioRecorder alongside WritingExercise */}
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <AudioRecorder passageText={lesson.reading_passage} />
                                 <WritingExercise passage={lesson.reading_passage} />

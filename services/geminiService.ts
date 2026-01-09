@@ -6,16 +6,17 @@ import { DailyLesson, AnalysisResult, Word, Exercise, WritingAnalysisResult } fr
 const apiKey = process.env.API_KEY;
 let ai: GoogleGenAI;
 
+// Debugging Log (Safe - masks the key)
 if (apiKey && apiKey !== "undefined" && apiKey !== "") {
+    console.log(`API Key detected (Length: ${apiKey.length}). Initializing Gemini Client...`);
     ai = new GoogleGenAI({ apiKey: apiKey });
 } else {
-    console.error("CRITICAL: API Key is missing. The app will fail to generate content.");
+    console.error("CRITICAL: API Key is missing or empty.");
 }
 
 const getAiClient = () => {
     if (!ai) {
-        // Hata detayını netleştirelim
-        throw new Error("API Anahtarı bulunamadı. Lütfen Vercel ayarlarından API_KEY ekleyip projeyi 'Redeploy' ettiğinizden emin olun.");
+        throw new Error("MISSING_API_KEY");
     }
     return ai;
 }
@@ -25,7 +26,6 @@ const AUDIO_MODEL = "gemini-3-flash-preview";
 const TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const IMAGE_MODEL = "gemini-2.5-flash-image";
 
-// Cache version key to invalidate old data if structure changes
 const CACHE_VERSION = "v2_mondly";
 
 const lessonSchema: Schema = {
@@ -124,50 +124,18 @@ const regenerationSchema: Schema = {
   required: ["reading_passage", "exercises"],
 };
 
-// Helper to determine curriculum configuration based on Selected Level
 const getLevelConfig = (level: string) => {
     switch (level) {
-        case 'A1':
-            return {
-                wordCount: "60-80",
-                structure: "Very simple sentences (SVO). Present Simple tense dominance.",
-                themeFocus: "Daily routines, family, home, basic needs."
-            };
-        case 'A2':
-            return {
-                wordCount: "80-100",
-                structure: "Simple and compound sentences connected with 'and', 'but'. Past Simple.",
-                themeFocus: "Travel, shopping, local geography, work."
-            };
-        case 'B1':
-            return {
-                wordCount: "100-130",
-                structure: "Cohesive paragraphs. Use of future forms, modals, and simple complex sentences.",
-                themeFocus: "Experiences, dreams, hopes, events, basic current affairs."
-            };
-        case 'B2':
-            return {
-                wordCount: "140-160",
-                structure: "Complex sentences with relative clauses. Present Perfect. Clear argumentation.",
-                themeFocus: "Abstract topics, technical discussions, social issues."
-            };
-        case 'C1':
-            return {
-                wordCount: "160-200",
-                structure: "Sophisticated academic structure. Passive voice, inversion, advanced connectors.",
-                themeFocus: "Academic research, philosophy, global economics."
-            };
-        default:
-            return {
-                wordCount: "100-120",
-                structure: "Standard intermediate structure.",
-                themeFocus: "General interest."
-            };
+        case 'A1': return { wordCount: "60-80", structure: "Very simple sentences (SVO). Present Simple tense dominance.", themeFocus: "Daily routines, family, home, basic needs." };
+        case 'A2': return { wordCount: "80-100", structure: "Simple and compound sentences connected with 'and', 'but'. Past Simple.", themeFocus: "Travel, shopping, local geography, work." };
+        case 'B1': return { wordCount: "100-130", structure: "Cohesive paragraphs. Use of future forms, modals, and simple complex sentences.", themeFocus: "Experiences, dreams, hopes, events, basic current affairs." };
+        case 'B2': return { wordCount: "140-160", structure: "Complex sentences with relative clauses. Present Perfect. Clear argumentation.", themeFocus: "Abstract topics, technical discussions, social issues." };
+        case 'C1': return { wordCount: "160-200", structure: "Sophisticated academic structure. Passive voice, inversion, advanced connectors.", themeFocus: "Academic research, philosophy, global economics." };
+        default: return { wordCount: "100-120", structure: "Standard intermediate structure.", themeFocus: "General interest." };
     }
 };
 
 export const generateLesson = async (day: number, userLevel: string = "A1"): Promise<DailyLesson> => {
-  // 1. Check LocalStorage Cache
   const cacheKey = `yds_lesson_${userLevel}_${day}_${CACHE_VERSION}`;
   const cachedData = localStorage.getItem(cacheKey);
 
@@ -176,34 +144,25 @@ export const generateLesson = async (day: number, userLevel: string = "A1"): Pro
           console.log("Serving lesson from cache");
           return JSON.parse(cachedData) as DailyLesson;
       } catch (e) {
-          console.warn("Cache parse error, fetching new data");
           localStorage.removeItem(cacheKey);
       }
   }
 
   const config = getLevelConfig(userLevel);
-  
   const prompt = `
     Role: Expert English Teacher.
     Target Audience: Student at **${userLevel}** level.
     Day: ${day}/30.
-    
     Task Requirements:
-    1. **Difficulty Level**: Set the 'difficulty_level' field explicitly to "${userLevel}" in the output JSON.
-    2. **Theme**: Specific topic for Day ${day}.
-    3. **Target Words**: 10 essential words for ${userLevel}.
+    1. **Difficulty Level**: Set 'difficulty_level' to "${userLevel}".
+    2. **Theme**: Topic for Day ${day}.
+    3. **Target Words**: 10 essential words.
     4. **Collocations**: 3 useful phrases.
-    5. **Grammar**: One specific grammar point, explained simply.
+    5. **Grammar**: One grammar point.
     6. **Reading Passage**: ${config.wordCount} words, ${userLevel} level. Wrap target words in **double asterisks**.
-    7. **Conversation Scenario**: Create a roleplay scenario related to the theme.
-       - Setting: Where does it take place?
-       - User Role: Who is the student?
-       - AI Role: Who are you?
-       - Starter Message: The first thing the AI says to start the chat.
-       - Suggested Replies: 3 options for the student to reply with.
+    7. **Conversation Scenario**: Roleplay scenario.
     8. **Exercises**: 4 Multiple Choice questions.
-    
-    Output strictly valid JSON matching schema.
+    Output strictly valid JSON.
   `;
 
   try {
@@ -215,163 +174,6 @@ export const generateLesson = async (day: number, userLevel: string = "A1"): Pro
         responseMimeType: "application/json",
         responseSchema: lessonSchema,
         temperature: 0.7,
-        // Disable safety settings to prevent false positives on educational content
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-        ] as any, // Using 'any' to bypass strict enum typing issues if types are missing
-      },
-    });
-
-    const text = response.text;
-    if (!text) {
-        console.error("Gemini Response Empty. Full response:", response);
-        throw new Error("Gemini'den boş yanıt döndü. Güvenlik filtresine takılmış olabilir.");
-    }
-    
-    const lessonData = JSON.parse(text) as DailyLesson;
-
-    try {
-        localStorage.setItem(cacheKey, JSON.stringify(lessonData));
-    } catch (e) {
-        console.warn("LocalStorage full or disabled, skipping cache save.");
-    }
-
-    return lessonData;
-  } catch (error) {
-    console.error("Gemini Generation Error Detailed:", error);
-    throw error;
-  }
-};
-
-export const getChatReply = async (history: {role: string, parts: {text: string}[]}[], userLevel: string): Promise<{text: string, suggestions: string[]}> => {
-    const prompt = `
-      You are a roleplay partner in an English learning app.
-      Level: ${userLevel}.
-      Keep responses concise (max 2 sentences).
-      Correct the user gently if they make big mistakes, but prioritize flow.
-      Produce 3 short suggested replies for the user for the NEXT turn.
-      
-      Output JSON: { "text": "Your reply...", "suggestions": ["Option 1", "Option 2", "Option 3"] }
-    `;
-
-    const schema: Schema = {
-        type: Type.OBJECT,
-        properties: {
-            text: { type: Type.STRING },
-            suggestions: { type: Type.ARRAY, items: { type: Type.STRING } }
-        },
-        required: ["text", "suggestions"]
-    };
-
-    try {
-        const client = getAiClient();
-        // Construct the chat history for context
-        const contents = [
-            ...history,
-            { role: 'user', parts: [{ text: prompt }] }
-        ];
-
-        const response = await client.models.generateContent({
-            model: LESSON_MODEL,
-            contents: contents,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: schema
-            }
-        });
-
-        return JSON.parse(response.text!) as {text: string, suggestions: string[]};
-    } catch (e) {
-        console.error("Chat Error", e);
-        return { text: "I didn't quite catch that. Could you say it again?", suggestions: ["Yes", "No"] };
-    }
-};
-
-export const generateThemeImage = async (theme: string): Promise<string | undefined> => {
-  const prompt = `Create a cute, colorful, 3D cartoon style illustration for an English lesson about: "${theme}". 
-  Style: Mondly/Duolingo style, vibrant colors, soft lighting, 3D isometric or icon style. 
-  White or simple colored background. No text.`;
-
-  const generateWithImagen = async () => {
-    try {
-      const client = getAiClient();
-      const response = await client.models.generateImages({
-        model: 'imagen-3.0-generate-001',
-        prompt: prompt,
-        config: {
-          numberOfImages: 1,
-          aspectRatio: "1:1",
-          outputMimeType: "image/jpeg"
-        }
-      });
-      const base64Image = response.generatedImages?.[0]?.image?.imageBytes;
-      if (base64Image) {
-        return `data:image/jpeg;base64,${base64Image}`;
-      }
-    } catch (e) {
-      console.error("Imagen fallback failed", e);
-    }
-    return undefined;
-  };
-
-  try {
-    const client = getAiClient();
-    const response = await client.models.generateContent({
-      model: IMAGE_MODEL,
-      contents: {
-        parts: [{ text: prompt }]
-      },
-      config: {
-        imageConfig: {
-            aspectRatio: "1:1",
-        }
-      }
-    });
-
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData && part.inlineData.data) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-      }
-    }
-    // If no image part returned, try fallback
-    return await generateWithImagen();
-  } catch (error) {
-    console.warn("Gemini Image Model failed, switching to Imagen...", error);
-    return await generateWithImagen();
-  }
-};
-
-export const regeneratePassage = async (currentTheme: string, words: Word[], userLevel: string = "A1"): Promise<{ reading_passage: string, exercises: Exercise[] }> => {
-  const wordList = words.map(w => w.word).join(", ");
-  const config = getLevelConfig(userLevel);
-  
-  const prompt = `
-    Role: Expert Teacher.
-    Task: Rewrite a reading passage on "${currentTheme}".
-    Target Level: ${userLevel}
-    Target Words: ${wordList}
-    
-    Requirements:
-    1. New cohesive paragraph using target words.
-    2. Style: ${config.structure}
-    3. Wrap target words in **double asterisks**.
-    4. 4 NEW Multiple Choice questions.
-    
-    Output strictly valid JSON matching the schema.
-  `;
-
-  try {
-    const client = getAiClient();
-    const response = await client.models.generateContent({
-      model: LESSON_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: regenerationSchema,
-        temperature: 0.8,
         safetySettings: [
           { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
           { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -382,165 +184,152 @@ export const regeneratePassage = async (currentTheme: string, words: Word[], use
     });
 
     const text = response.text;
-    if (!text) throw new Error("No data returned from Gemini");
+    if (!text) throw new Error("EMPTY_RESPONSE");
     
-    return JSON.parse(text) as { reading_passage: string, exercises: Exercise[] };
-  } catch (error) {
-    console.error("Gemini Regeneration Error:", error);
+    const lessonData = JSON.parse(text) as DailyLesson;
+    try { localStorage.setItem(cacheKey, JSON.stringify(lessonData)); } catch (e) {}
+    return lessonData;
+  } catch (error: any) {
+    console.error("Gemini Generation Error:", error);
+    if (error.message.includes("403") || error.message.includes("API key")) {
+        throw new Error("INVALID_API_KEY");
+    }
     throw error;
   }
 };
 
-export const getQuickDefinition = async (word: string, contextSentence: string): Promise<{ turkish_meaning: string, english_definition: string, pronunciation: string, emoji: string }> => {
-  const prompt = `
-    Task: Explain "${word}" for a Turkish student.
-    Context: "${contextSentence}"
-    Return JSON with Turkish meaning, English definition, IPA, and an Emoji.
-  `;
-
-  const schema: Schema = {
-    type: Type.OBJECT,
-    properties: {
-      turkish_meaning: { type: Type.STRING },
-      english_definition: { type: Type.STRING },
-      pronunciation: { type: Type.STRING },
-      emoji: { type: Type.STRING }
-    },
-    required: ["turkish_meaning", "english_definition", "pronunciation", "emoji"]
-  };
-
-  try {
-    const client = getAiClient();
-    const response = await client.models.generateContent({
-      model: LESSON_MODEL,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema
-      }
-    });
-
-    return JSON.parse(response.text!) as { turkish_meaning: string, english_definition: string, pronunciation: string, emoji: string };
-  } catch (e) {
-    return { turkish_meaning: "Çeviri alınamadı", english_definition: "Definition unavailable", pronunciation: "", emoji: "❓" };
-  }
-};
-
-export const translateSentence = async (sentence: string): Promise<string> => {
-  const prompt = `Translate to Turkish: "${sentence}"`;
-  
-  try {
-      const client = getAiClient();
-      const response = await client.models.generateContent({
-          model: LESSON_MODEL,
-          contents: prompt,
-      });
-      return response.text?.trim() || "Çeviri yapılamadı.";
-  } catch (e) {
-      console.error(e);
-      return "Çeviri hatası.";
-  }
-};
-
-export const evaluateWriting = async (originalPassage: string, userText: string): Promise<WritingAnalysisResult> => {
+export const getChatReply = async (history: {role: string, parts: {text: string}[]}[], userLevel: string): Promise<{text: string, suggestions: string[]}> => {
     const prompt = `
-      Evaluate Turkish summary of: "${originalPassage.substring(0, 500)}".
-      Student Summary: "${userText}".
-      
-      Return JSON: score (0-100), feedback (Turkish), missing_points, better_version.
+      Roleplay partner. Level: ${userLevel}. Concise (max 2 sentences). Correct gently.
+      Output JSON: { "text": "...", "suggestions": ["...", "...", "..."] }
     `;
-  
     const schema: Schema = {
         type: Type.OBJECT,
-        properties: {
-          score: { type: Type.NUMBER },
-          feedback: { type: Type.STRING },
-          missing_points: { type: Type.ARRAY, items: { type: Type.STRING } },
-          better_version: { type: Type.STRING }
-        },
-        required: ["score", "feedback", "missing_points", "better_version"]
+        properties: { text: { type: Type.STRING }, suggestions: { type: Type.ARRAY, items: { type: Type.STRING } } },
+        required: ["text", "suggestions"]
     };
 
     try {
         const client = getAiClient();
         const response = await client.models.generateContent({
             model: LESSON_MODEL,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: schema
-            }
+            contents: [...history, { role: 'user', parts: [{ text: prompt }] }],
+            config: { responseMimeType: "application/json", responseSchema: schema }
         });
-        
-        return JSON.parse(response.text!) as WritingAnalysisResult;
+        return JSON.parse(response.text!) as {text: string, suggestions: string[]};
     } catch (e) {
-        console.error("Writing Eval Error", e);
-        throw new Error("Değerlendirme yapılamadı");
+        return { text: "Connection error. Please check your API key.", suggestions: ["Retry"] };
     }
 };
 
-export const analyzePronunciation = async (audioBase64: string, passageText: string): Promise<AnalysisResult> => {
-  const prompt = `
-    Analyze pronunciation. Reference: "${passageText.substring(0, 500)}".
-    Output JSON: score, feedback (Turkish), corrections list.
-  `;
+export const generateThemeImage = async (theme: string): Promise<string | undefined> => {
+  const prompt = `Cute 3D cartoon illustration: "${theme}". Mondly style, vibrant colors, white background.`;
+  try {
+    const client = getAiClient();
+    // Try fast image model first
+    try {
+        const response = await client.models.generateContent({
+            model: IMAGE_MODEL,
+            contents: { parts: [{ text: prompt }] },
+            config: { imageConfig: { aspectRatio: "1:1" } }
+        });
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData?.data) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
+    } catch(e) {}
 
+    // Fallback to Imagen
+    const response = await client.models.generateImages({
+        model: 'imagen-3.0-generate-001',
+        prompt: prompt,
+        config: { numberOfImages: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" }
+    });
+    const base64 = response.generatedImages?.[0]?.image?.imageBytes;
+    return base64 ? `data:image/jpeg;base64,${base64}` : undefined;
+  } catch (error) {
+    return undefined;
+  }
+};
+
+export const regeneratePassage = async (currentTheme: string, words: Word[], userLevel: string = "A1"): Promise<{ reading_passage: string, exercises: Exercise[] }> => {
+  const wordList = words.map(w => w.word).join(", ");
+  const prompt = `Rewrite reading passage on "${currentTheme}". Level: ${userLevel}. Words: ${wordList}. 4 new MCQs. Return JSON.`;
+  try {
+    const client = getAiClient();
+    const response = await client.models.generateContent({
+      model: LESSON_MODEL,
+      contents: prompt,
+      config: { responseMimeType: "application/json", responseSchema: regenerationSchema }
+    });
+    return JSON.parse(response.text!) as { reading_passage: string, exercises: Exercise[] };
+  } catch (error) { throw error; }
+};
+
+export const getQuickDefinition = async (word: string, contextSentence: string): Promise<{ turkish_meaning: string, english_definition: string, pronunciation: string, emoji: string }> => {
+  const prompt = `Explain "${word}" for Turkish student. Context: "${contextSentence}". Return JSON {turkish_meaning, english_definition, pronunciation, emoji}`;
+  const schema: Schema = {
+    type: Type.OBJECT,
+    properties: { turkish_meaning: { type: Type.STRING }, english_definition: { type: Type.STRING }, pronunciation: { type: Type.STRING }, emoji: { type: Type.STRING } },
+    required: ["turkish_meaning", "english_definition", "pronunciation", "emoji"]
+  };
+  try {
+    const client = getAiClient();
+    const response = await client.models.generateContent({ model: LESSON_MODEL, contents: prompt, config: { responseMimeType: "application/json", responseSchema: schema } });
+    return JSON.parse(response.text!);
+  } catch (e) { return { turkish_meaning: "...", english_definition: "...", pronunciation: "", emoji: "❓" }; }
+};
+
+export const translateSentence = async (sentence: string): Promise<string> => {
+  try {
+      const client = getAiClient();
+      const response = await client.models.generateContent({ model: LESSON_MODEL, contents: `Translate to Turkish: "${sentence}"` });
+      return response.text?.trim() || "Error";
+  } catch (e) { return "Çeviri hatası."; }
+};
+
+export const evaluateWriting = async (originalPassage: string, userText: string): Promise<WritingAnalysisResult> => {
+    const prompt = `Evaluate Turkish summary of: "${originalPassage.substring(0,300)}". Student: "${userText}". JSON: score, feedback, missing_points, better_version.`;
+    const schema: Schema = {
+        type: Type.OBJECT,
+        properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING }, missing_points: { type: Type.ARRAY, items: { type: Type.STRING } }, better_version: { type: Type.STRING } },
+        required: ["score", "feedback", "missing_points", "better_version"]
+    };
+    try {
+        const client = getAiClient();
+        const response = await client.models.generateContent({ model: LESSON_MODEL, contents: prompt, config: { responseMimeType: "application/json", responseSchema: schema } });
+        return JSON.parse(response.text!);
+    } catch (e) { throw new Error("Eval failed"); }
+};
+
+export const analyzePronunciation = async (audioBase64: string, passageText: string): Promise<AnalysisResult> => {
   try {
     const client = getAiClient();
     const response = await client.models.generateContent({
       model: AUDIO_MODEL,
-      contents: {
-        parts: [
-          { inlineData: { mimeType: "audio/wav", data: audioBase64 } },
-          { text: prompt }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json",
-      }
+      contents: { parts: [{ inlineData: { mimeType: "audio/wav", data: audioBase64 } }, { text: `Analyze pronunciation vs: "${passageText.substring(0,300)}". JSON: score, feedback, corrections.` }] },
+      config: { responseMimeType: "application/json" }
     });
-
-    const text = response.text;
-    if (!text) throw new Error("No analysis returned");
-    return JSON.parse(text) as AnalysisResult;
-
-  } catch (error: any) {
-    console.error("Audio Analysis Error:", error);
-    return {
-      score: 0,
-      feedback: "Ses analizi şu anda yapılamadı. Lütfen tekrar deneyin.",
-      corrections: []
-    };
+    return JSON.parse(response.text!) as AnalysisResult;
+  } catch (error) {
+    return { score: 0, feedback: "Analiz hatası (API Key kontrol ediniz).", corrections: [] };
   }
 };
 
-// --- TTS Helpers ---
-
+// TTS
 function decode(base64: string) {
   const binaryString = atob(base64);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
+  for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
   return bytes;
 }
-
-async function decodeAudioData(
-  data: Uint8Array,
-  ctx: AudioContext,
-  sampleRate: number,
-  numChannels: number,
-): Promise<AudioBuffer> {
+async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> {
   const dataInt16 = new Int16Array(data.buffer);
   const frameCount = dataInt16.length / numChannels;
   const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
-
-  for (let channel = 0; channel < numChannels; channel++) {
-    const channelData = buffer.getChannelData(channel);
-    for (let i = 0; i < frameCount; i++) {
-      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
-    }
+  for (let c = 0; c < numChannels; c++) {
+    const channelData = buffer.getChannelData(c);
+    for (let i = 0; i < frameCount; i++) { channelData[i] = dataInt16[i * numChannels + c] / 32768.0; }
   }
   return buffer;
 }
@@ -551,49 +340,23 @@ let isStopped = false;
 
 export const stopTTS = () => {
   isStopped = true;
-  if (currentSource) {
-    try { currentSource.stop(); } catch (e) {}
-    currentSource = null;
-  }
-  if (currentAudioContext && currentAudioContext.state !== 'closed') {
-    currentAudioContext.close();
-    currentAudioContext = null;
-  }
-  if (typeof window !== 'undefined' && window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
+  if (currentSource) { try { currentSource.stop(); } catch (e) {} currentSource = null; }
+  if (currentAudioContext && currentAudioContext.state !== 'closed') { currentAudioContext.close(); currentAudioContext = null; }
+  if (typeof window !== 'undefined' && window.speechSynthesis) { window.speechSynthesis.cancel(); }
   window.dispatchEvent(new Event('tts-stopped'));
 };
 
 const playFallbackTTS = (text: string): Promise<void> => {
   return new Promise((resolve) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      resolve();
-      return;
-    }
-    const cleanText = text.trim();
-    if (!cleanText) { resolve(); return; }
-
+    if (typeof window === 'undefined' || !window.speechSynthesis) { resolve(); return; }
     window.speechSynthesis.cancel();
-
     setTimeout(() => {
-        const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.lang = 'en-US'; 
-        utterance.rate = 0.9;
-        
-        const voices = window.speechSynthesis.getVoices();
-        const preferredVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Google')) ||
-                               voices.find(v => v.lang === 'en-US') || 
-                               voices.find(v => v.lang.startsWith('en'));
-        
-        if (preferredVoice) utterance.voice = preferredVoice;
-
-        utterance.onend = () => resolve();
-        utterance.onerror = () => resolve();
-
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'en-US'; 
+        u.onend = () => resolve();
+        u.onerror = () => resolve();
         if (isStopped) { resolve(); return; }
-
-        window.speechSynthesis.speak(utterance);
+        window.speechSynthesis.speak(u);
     }, 50);
   });
 };
@@ -605,61 +368,26 @@ export const playTTS = async (text: string): Promise<void> => {
     const response = await client.models.generateContent({
       model: TTS_MODEL,
       contents: [{ parts: [{ text: text }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Fenrir' }, 
-          },
-        },
-      },
+      config: { responseModalities: [Modality.AUDIO], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } } },
     });
-
     if (isStopped) return;
+    const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64) throw new Error("No audio");
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("No audio data returned");
-
-    if (currentAudioContext && currentAudioContext.state !== 'closed') {
-        currentAudioContext.close();
-    }
-    
-    if (isStopped) return;
-
+    if (currentAudioContext) currentAudioContext.close();
     currentAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    const buffer = await decodeAudioData(decode(base64), currentAudioContext, 24000, 1);
     
-    if (currentAudioContext.state === 'suspended') {
-      await currentAudioContext.resume();
-    }
-
-    const audioBuffer = await decodeAudioData(
-      decode(base64Audio),
-      currentAudioContext,
-      24000,
-      1,
-    );
-    
-    if (isStopped) {
-        currentAudioContext.close();
-        return;
-    }
-
+    if (isStopped) { currentAudioContext.close(); return; }
     currentSource = currentAudioContext.createBufferSource();
-    currentSource.buffer = audioBuffer;
+    currentSource.buffer = buffer;
     currentSource.connect(currentAudioContext.destination);
-
     return new Promise((resolve) => {
         if (!currentSource) return resolve();
-        
-        currentSource.onended = () => {
-            resolve();
-            currentSource = null;
-        };
+        currentSource.onended = () => { resolve(); currentSource = null; };
         currentSource.start();
     });
-
   } catch (error) {
-    console.warn("Gemini TTS failed, switching to browser fallback.");
     if (isStopped) return;
     return playFallbackTTS(text);
   }
