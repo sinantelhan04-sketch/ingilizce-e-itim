@@ -82,9 +82,10 @@ const AppContent: React.FC = () => {
             generateThemeImage(data.theme).then((imgUrl) => {
                 if (imgUrl) setLesson(prev => prev ? { ...prev, imageUrl: imgUrl } : null);
             });
-        } catch (err) {
-            setError(`İçerik oluşturulamadı.`);
-            addToast("Ders yüklenirken hata oluştu", 'error');
+        } catch (err: any) {
+            console.error("Lesson Loading Error:", err);
+            setError(`İçerik oluşturulamadı: ${err.message}`);
+            addToast("Ders yüklenirken hata oluştu. Lütfen konsolu kontrol edin.", 'error');
             setViewMode('MAP'); 
         } finally {
             setLoading(false);

@@ -14,7 +14,8 @@ if (apiKey && apiKey !== "undefined" && apiKey !== "") {
 
 const getAiClient = () => {
     if (!ai) {
-        throw new Error("API Anahtarı bulunamadı. Lütfen Vercel ayarlarından API_KEY eklediğinizden emin olun.");
+        // Hata detayını netleştirelim
+        throw new Error("API Anahtarı bulunamadı. Lütfen Vercel ayarlarından API_KEY ekleyip projeyi 'Redeploy' ettiğinizden emin olun.");
     }
     return ai;
 }
@@ -214,11 +215,21 @@ export const generateLesson = async (day: number, userLevel: string = "A1"): Pro
         responseMimeType: "application/json",
         responseSchema: lessonSchema,
         temperature: 0.7,
+        // Disable safety settings to prevent false positives on educational content
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+        ] as any, // Using 'any' to bypass strict enum typing issues if types are missing
       },
     });
 
     const text = response.text;
-    if (!text) throw new Error("No data returned from Gemini");
+    if (!text) {
+        console.error("Gemini Response Empty. Full response:", response);
+        throw new Error("Gemini'den boş yanıt döndü. Güvenlik filtresine takılmış olabilir.");
+    }
     
     const lessonData = JSON.parse(text) as DailyLesson;
 
@@ -230,7 +241,7 @@ export const generateLesson = async (day: number, userLevel: string = "A1"): Pro
 
     return lessonData;
   } catch (error) {
-    console.error("Gemini Generation Error:", error);
+    console.error("Gemini Generation Error Detailed:", error);
     throw error;
   }
 };
@@ -360,7 +371,13 @@ export const regeneratePassage = async (currentTheme: string, words: Word[], use
       config: {
         responseMimeType: "application/json",
         responseSchema: regenerationSchema,
-        temperature: 0.8, 
+        temperature: 0.8,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+        ] as any,
       },
     });
 
