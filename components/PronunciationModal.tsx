@@ -28,7 +28,15 @@ const PronunciationModal: React.FC<PronunciationModalProps> = ({ text, isOpen, o
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setAudioStream(stream);
 
-      const mediaRecorder = new MediaRecorder(stream);
+      // Determine supported mime type
+      let options: MediaRecorderOptions | undefined = undefined;
+      if (MediaRecorder.isTypeSupported('audio/webm')) {
+        options = { mimeType: 'audio/webm' };
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        options = { mimeType: 'audio/mp4' };
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -40,8 +48,9 @@ const PronunciationModal: React.FC<PronunciationModalProps> = ({ text, isOpen, o
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/wav' });
-        handleAnalysis(audioBlob);
+        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+        handleAnalysis(audioBlob, mimeType);
         
         stream.getTracks().forEach(track => track.stop());
         setAudioStream(null);
@@ -63,7 +72,7 @@ const PronunciationModal: React.FC<PronunciationModalProps> = ({ text, isOpen, o
     }
   };
 
-  const handleAnalysis = async (blob: Blob) => {
+  const handleAnalysis = async (blob: Blob, mimeType: string) => {
     setIsAnalyzing(true);
     const reader = new FileReader();
     reader.readAsDataURL(blob);
@@ -72,7 +81,7 @@ const PronunciationModal: React.FC<PronunciationModalProps> = ({ text, isOpen, o
       if (resultString) {
           const base64String = resultString.split(',')[1];
           try {
-            const analysis = await analyzePronunciation(base64String, text);
+            const analysis = await analyzePronunciation(base64String, text, mimeType);
             setResult(analysis);
           } catch (error) {
             console.error(error);

@@ -19,7 +19,18 @@ const AudioRecorder: React.FC<{ passageText: string }> = ({ passageText }) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setAudioStream(stream);
-      const mediaRecorder = new MediaRecorder(stream);
+
+      // Feature detect supported mime type
+      // Chrome/Edge/Firefox -> audio/webm
+      // Safari -> audio/mp4 (often)
+      let options: MediaRecorderOptions | undefined = undefined;
+      if (MediaRecorder.isTypeSupported('audio/webm')) {
+        options = { mimeType: 'audio/webm' };
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        options = { mimeType: 'audio/mp4' };
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       
@@ -31,8 +42,10 @@ const AudioRecorder: React.FC<{ passageText: string }> = ({ passageText }) => {
       };
       
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/wav' });
-        handleAnalysis(audioBlob);
+        // Use the actual mime type determined by the browser
+        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+        handleAnalysis(audioBlob, mimeType);
         stream.getTracks().forEach(track => track.stop());
         setAudioStream(null);
       };
@@ -49,7 +62,7 @@ const AudioRecorder: React.FC<{ passageText: string }> = ({ passageText }) => {
     }
   };
 
-  const handleAnalysis = async (blob: Blob) => {
+  const handleAnalysis = async (blob: Blob, mimeType: string) => {
     setIsAnalyzing(true);
     const reader = new FileReader();
     reader.readAsDataURL(blob);
@@ -58,10 +71,17 @@ const AudioRecorder: React.FC<{ passageText: string }> = ({ passageText }) => {
       if (resultString) {
           const base64String = resultString.split(',')[1];
           try {
-            const analysis = await analyzePronunciation(base64String, passageText);
+            // Pass the detected mimeType to the service
+            const analysis = await analyzePronunciation(base64String, passageText, mimeType);
             setResult(analysis);
-            addToast("Analiz tamamlandı", "success");
-          } catch (error) { addToast("Analiz başarısız", "error"); } 
+            if (analysis.score > 0) {
+                addToast("Analiz tamamlandı", "success");
+            } else {
+                addToast("Analiz yapılamadı", "error");
+            }
+          } catch (error) { 
+            addToast("Analiz başarısız", "error"); 
+          } 
           finally { setIsAnalyzing(false); }
       }
     };

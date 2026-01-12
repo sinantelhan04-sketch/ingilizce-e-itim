@@ -300,17 +300,26 @@ export const evaluateWriting = async (originalPassage: string, userText: string)
     } catch (e) { throw new Error("Eval failed"); }
 };
 
-export const analyzePronunciation = async (audioBase64: string, passageText: string): Promise<AnalysisResult> => {
+export const analyzePronunciation = async (audioBase64: string, passageText: string, mimeType: string = "audio/wav"): Promise<AnalysisResult> => {
   try {
     const client = getAiClient();
+    console.log(`Analyzing pronunciation with model ${AUDIO_MODEL} and mimeType ${mimeType}`);
+    
     const response = await client.models.generateContent({
       model: AUDIO_MODEL,
-      contents: { parts: [{ inlineData: { mimeType: "audio/wav", data: audioBase64 } }, { text: `Analyze pronunciation vs: "${passageText.substring(0,300)}". JSON: score, feedback, corrections.` }] },
+      contents: { 
+        parts: [
+          { inlineData: { mimeType: mimeType, data: audioBase64 } }, 
+          { text: `Analyze pronunciation vs: "${passageText.substring(0,300)}". JSON: score, feedback, corrections.` }
+        ] 
+      },
       config: { responseMimeType: "application/json" }
     });
+    
     return JSON.parse(response.text!) as AnalysisResult;
-  } catch (error) {
-    return { score: 0, feedback: "Analiz hatası (API Key kontrol ediniz).", corrections: [] };
+  } catch (error: any) {
+    console.error("Pronunciation Analysis Error:", error);
+    return { score: 0, feedback: `Analiz hatası: ${error.message || "Bilinmeyen hata"}`, corrections: [] };
   }
 };
 
