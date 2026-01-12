@@ -4,11 +4,18 @@ import { DailyLesson, AnalysisResult, Word, Exercise, WritingAnalysisResult } fr
 // =========================================================================================
 // API Key Initialization
 // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+// We lazy load the client to prevent app crash at startup if key is missing.
 // =========================================================================================
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let ai: GoogleGenAI | null = null;
 
 const getAiClient = () => {
+    if (!ai) {
+        if (!process.env.API_KEY || process.env.API_KEY.trim() === "") {
+            throw new Error("MISSING_API_KEY");
+        }
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    }
     return ai;
 }
 
@@ -183,7 +190,7 @@ export const generateLesson = async (day: number, userLevel: string = "A1"): Pro
     return lessonData;
   } catch (error: any) {
     console.error("Gemini Generation Error:", error);
-    if (error.message.includes("403") || error.message.includes("API key")) {
+    if (error.message.includes("403") || error.message.includes("API key") || error.message === "MISSING_API_KEY") {
         throw new Error("INVALID_API_KEY");
     }
     throw error;
@@ -232,7 +239,7 @@ export const generateThemeImage = async (theme: string): Promise<string | undefi
 
     // Fallback to Imagen
     const response = await client.models.generateImages({
-        model: 'imagen-3.0-generate-001',
+        model: 'imagen-4.0-generate-001',
         prompt: prompt,
         config: { numberOfImages: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" }
     });
