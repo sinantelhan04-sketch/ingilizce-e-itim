@@ -17,11 +17,6 @@ class ErrorBoundary extends Component<Props, State> {
     error: null
   };
 
-  // Explicit constructor helps TypeScript correctly infer 'props' on the instance
-  constructor(props: Props) {
-    super(props);
-  }
-
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }

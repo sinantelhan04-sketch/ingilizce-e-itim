@@ -7,7 +7,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, cwd, '');
   
   // Try to get API_KEY from process.env first (system env), then from .env files
-  const apiKey = process.env.API_KEY || env.API_KEY || '';
+  // If not found, use the user-provided key as a fallback
+  const apiKey = process.env.API_KEY || env.API_KEY || 'AIzaSyBqB4OueJQT9PKaM6J1SZ-LSvhrefV0CvA';
 
   return {
     plugins: [react()],
