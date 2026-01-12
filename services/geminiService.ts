@@ -3,18 +3,23 @@ import { DailyLesson, AnalysisResult, Word, Exercise, WritingAnalysisResult } fr
 
 // =========================================================================================
 // API Key Initialization
-// The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-// We lazy load the client to prevent app crash at startup if key is missing.
 // =========================================================================================
 
 let ai: GoogleGenAI | null = null;
 
+// Kullanıcının sağladığı anahtar - Bağlantı sorunlarını çözmek için buraya eklendi
+const DIRECT_API_KEY = "AIzaSyBqB4OueJQT9PKaM6J1SZ-LSvhrefV0CvA";
+
 const getAiClient = () => {
     if (!ai) {
-        if (!process.env.API_KEY || process.env.API_KEY.trim() === "") {
+        // Önce sistem değişkenine bak, yoksa doğrudan verilen anahtarı kullan
+        const apiKey = process.env.API_KEY || DIRECT_API_KEY;
+
+        if (!apiKey || apiKey.trim() === "") {
+            console.error("API Key bulunamadı.");
             throw new Error("MISSING_API_KEY");
         }
-        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        ai = new GoogleGenAI({ apiKey: apiKey });
     }
     return ai;
 }
@@ -305,6 +310,9 @@ export const analyzePronunciation = async (audioBase64: string, passageText: str
     const client = getAiClient();
     console.log(`Analyzing pronunciation with model ${AUDIO_MODEL} and mimeType ${mimeType}`);
     
+    // Check if key is available
+    if (!client) throw new Error("API Client not initialized");
+
     const response = await client.models.generateContent({
       model: AUDIO_MODEL,
       contents: { 
@@ -319,7 +327,12 @@ export const analyzePronunciation = async (audioBase64: string, passageText: str
     return JSON.parse(response.text!) as AnalysisResult;
   } catch (error: any) {
     console.error("Pronunciation Analysis Error:", error);
-    return { score: 0, feedback: `Analiz hatası: ${error.message || "Bilinmeyen hata"}`, corrections: [] };
+    // Return a structured error response that the UI can display nicely
+    return { 
+        score: 0, 
+        feedback: "Analiz sırasında bir hata oluştu. Lütfen mikrofon iznini ve internet bağlantınızı kontrol edin. (API Key sorunu olabilir)", 
+        corrections: [] 
+    };
   }
 };
 
@@ -396,6 +409,7 @@ export const playTTS = async (text: string): Promise<void> => {
         currentSource.start();
     });
   } catch (error) {
+    console.warn("TTS Error, using fallback:", error);
     if (isStopped) return;
     return playFallbackTTS(text);
   }
