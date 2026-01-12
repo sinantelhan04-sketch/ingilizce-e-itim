@@ -77,7 +77,11 @@ const VocabList: React.FC<VocabListProps> = ({ words, savedWords, onToggleSave }
                     </div>
                 </div>
                 
-                <h4 className="text-3xl font-display font-bold text-slate-800 mb-1 tracking-tight">{word.word}</h4>
+                <div className="flex items-center gap-3 mb-1">
+                    <h4 className="text-3xl font-display font-bold text-slate-800 tracking-tight">{word.word}</h4>
+                    {word.emoji && <span className="text-3xl filter drop-shadow-sm transform group-hover:scale-125 transition-transform duration-300">{word.emoji}</span>}
+                </div>
+                
                 <div className="text-slate-400 font-mono text-sm mb-4">/{word.ipa}/</div>
                 <p className="text-slate-700 font-bold text-lg mb-6 leading-relaxed border-l-4 border-black/10 pl-3">{word.turkish_meaning}</p>
                 

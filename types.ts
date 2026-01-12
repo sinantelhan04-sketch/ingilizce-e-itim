@@ -1,6 +1,7 @@
 
 export interface Word {
   word: string;
+  emoji: string; // New field for visual association
   ipa: string;
   type: string;
   turkish_meaning: string;

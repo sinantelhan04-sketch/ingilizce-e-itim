@@ -1,33 +1,14 @@
-
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { DailyLesson, AnalysisResult, Word, Exercise, WritingAnalysisResult } from "../types";
 
 // =========================================================================================
-// ⚠️ DİKKAT: API Anahtarınızı Vercel ile uğraşmadan direkt buraya yazabilirsiniz.
-// Sadece tırnak işaretlerinin içine anahtarınızı yapıştırın. Örn: "AIzaSyD..."
-// =========================================================================================
-const MANUAL_API_KEY = "AIzaSyBqB4OueJQT9PKaM6J1SZ-LSvhrefV0CvA"; 
+// API Key Initialization
+// The API key must be obtained exclusively from the environment variable process.env.API_KEY.
 // =========================================================================================
 
-// Safe Initialization logic
-// 1. Try process.env (Vercel/Vite standard)
-// 2. Try MANUAL_API_KEY (Direct integration fallback)
-const envKey = process.env.API_KEY;
-const finalApiKey = (envKey && envKey !== "undefined" && envKey !== "") ? envKey : MANUAL_API_KEY;
-
-let ai: GoogleGenAI;
-
-if (finalApiKey && finalApiKey !== "") {
-    console.log(`API Key detected via ${envKey ? 'Environment Var' : 'Manual Entry'}. Initializing...`);
-    ai = new GoogleGenAI({ apiKey: finalApiKey });
-} else {
-    console.error("CRITICAL: API Key is missing in both environment variables and manual entry.");
-}
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const getAiClient = () => {
-    if (!ai) {
-        throw new Error("MISSING_API_KEY");
-    }
     return ai;
 }
 
@@ -36,7 +17,7 @@ const AUDIO_MODEL = "gemini-3-flash-preview";
 const TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const IMAGE_MODEL = "gemini-2.5-flash-image";
 
-const CACHE_VERSION = "v2_mondly";
+const CACHE_VERSION = "v3_mondly_emoji"; // Version bumped to invalidate old cache without emojis
 
 const lessonSchema: Schema = {
   type: Type.OBJECT,
@@ -50,6 +31,7 @@ const lessonSchema: Schema = {
         type: Type.OBJECT,
         properties: {
           word: { type: Type.STRING },
+          emoji: { type: Type.STRING }, // Added emoji field
           ipa: { type: Type.STRING },
           type: { type: Type.STRING },
           turkish_meaning: { type: Type.STRING },
@@ -58,7 +40,7 @@ const lessonSchema: Schema = {
           antonym: { type: Type.STRING },
           example_sentence: { type: Type.STRING },
         },
-        required: ["word", "ipa", "type", "turkish_meaning", "definition", "synonym", "antonym", "example_sentence"]
+        required: ["word", "emoji", "ipa", "type", "turkish_meaning", "definition", "synonym", "antonym", "example_sentence"]
       },
     },
     collocations: {
@@ -166,7 +148,7 @@ export const generateLesson = async (day: number, userLevel: string = "A1"): Pro
     Task Requirements:
     1. **Difficulty Level**: Set 'difficulty_level' to "${userLevel}".
     2. **Theme**: Topic for Day ${day}.
-    3. **Target Words**: 10 essential words.
+    3. **Target Words**: 10 essential words. **Must include a relevant 'emoji' for each word.**
     4. **Collocations**: 3 useful phrases.
     5. **Grammar**: One grammar point.
     6. **Reading Passage**: ${config.wordCount} words, ${userLevel} level. Wrap target words in **double asterisks**.
