@@ -2,16 +2,26 @@
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { DailyLesson, AnalysisResult, Word, Exercise, WritingAnalysisResult } from "../types";
 
-// Safe Initialization
-const apiKey = process.env.API_KEY;
+// =========================================================================================
+// ⚠️ DİKKAT: API Anahtarınızı Vercel ile uğraşmadan direkt buraya yazabilirsiniz.
+// Sadece tırnak işaretlerinin içine anahtarınızı yapıştırın. Örn: "AIzaSyD..."
+// =========================================================================================
+const MANUAL_API_KEY = "AIzaSyBqB4OueJQT9PKaM6J1SZ-LSvhrefV0CvA"; 
+// =========================================================================================
+
+// Safe Initialization logic
+// 1. Try process.env (Vercel/Vite standard)
+// 2. Try MANUAL_API_KEY (Direct integration fallback)
+const envKey = process.env.API_KEY;
+const finalApiKey = (envKey && envKey !== "undefined" && envKey !== "") ? envKey : MANUAL_API_KEY;
+
 let ai: GoogleGenAI;
 
-// Debugging Log (Safe - masks the key)
-if (apiKey && apiKey !== "undefined" && apiKey !== "") {
-    console.log(`API Key detected (Length: ${apiKey.length}). Initializing Gemini Client...`);
-    ai = new GoogleGenAI({ apiKey: apiKey });
+if (finalApiKey && finalApiKey !== "") {
+    console.log(`API Key detected via ${envKey ? 'Environment Var' : 'Manual Entry'}. Initializing...`);
+    ai = new GoogleGenAI({ apiKey: finalApiKey });
 } else {
-    console.error("CRITICAL: API Key is missing or empty.");
+    console.error("CRITICAL: API Key is missing in both environment variables and manual entry.");
 }
 
 const getAiClient = () => {

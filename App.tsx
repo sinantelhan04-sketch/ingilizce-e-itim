@@ -46,8 +46,8 @@ const ApiKeyErrorModal = ({ isOpen }: { isOpen: boolean }) => {
                     <div className="flex items-start gap-3">
                         <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs">2</span>
                         <div>
-                            <strong className="block text-slate-800">Eğer Lokaldeysen:</strong>
-                            <p className="text-slate-600 mt-1">Ana dizinde <code className="bg-slate-200 px-1 py-0.5 rounded font-mono">.env</code> dosyası oluşturun ve içine <code className="bg-slate-200 px-1 py-0.5 rounded text-green-700 font-mono">API_KEY=AIza...</code> şeklinde anahtarınızı yapıştırın.</p>
+                            <strong className="block text-slate-800">Direkt Kod İçine Ekleme (Hızlı Çözüm):</strong>
+                            <p className="text-slate-600 mt-1"><code className="bg-slate-200 px-1 py-0.5 rounded font-mono">services/geminiService.ts</code> dosyasını açın ve en üstteki <code className="bg-slate-200 px-1 py-0.5 rounded text-blue-700 font-mono">MANUAL_API_KEY</code> değişkenine anahtarınızı yapıştırın.</p>
                         </div>
                     </div>
                 </div>

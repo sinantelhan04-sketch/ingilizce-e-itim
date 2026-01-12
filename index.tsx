@@ -1,4 +1,4 @@
-import React, { ReactNode, ErrorInfo, Component } from 'react';
+import React, { Component, ReactNode, ErrorInfo } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
