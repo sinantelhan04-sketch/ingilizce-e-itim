@@ -1,0 +1,22 @@
+
+{
+  "name": "Zero2Hero English",
+  "short_name": "Zero2Hero",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#7C3AED",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/201/201614.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/201/201614.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
