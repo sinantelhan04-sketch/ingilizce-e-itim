@@ -3,11 +3,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
-  // Using (process as any).cwd() to bypass "Property 'cwd' does not exist on type 'Process'" error
-  const env = loadEnv(mode, (process as any).cwd(), '');
+  const cwd = (process as any).cwd ? (process as any).cwd() : '.';
+  const env = loadEnv(mode, cwd, '');
   
-  // Use the key from env, fallback to empty string to prevent build errors
-  const apiKey = env.API_KEY || '';
+  // Try to get API_KEY from process.env first (system env), then from .env files
+  const apiKey = process.env.API_KEY || env.API_KEY || '';
 
   return {
     plugins: [react()],
