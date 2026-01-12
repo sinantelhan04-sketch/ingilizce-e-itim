@@ -1,8 +1,12 @@
+
 <!DOCTYPE html>
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Zero2Hero AI</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,46 +20,36 @@
         theme: {
             extend: {
                 colors: {
-                    primary: "#8B5CF6", // Violet
-                    "primary-dark": "#7C3AED",
+                    primary: "#7C3AED", // Deeper Violet for better contrast
+                    "primary-light": "#A78BFA",
+                    "primary-dark": "#5B21B6",
                     secondary: "#0EA5E9", // Sky
-                    "background-light": "#F0F9FF", 
-                    "background-dark": "#0F172A",
-                    // Legacy support
-                    brand: {
-                        50: '#eff6ff',
-                        100: '#dbeafe',
-                        500: '#3b82f6',
-                        600: '#2563eb', 
-                    },
+                    "surface": "#F8FAFC", 
+                    "surface-dark": "#0F172A",
                     accent: '#F472B6', // Pink
-                    success: '#22C55E',
+                    success: '#10B981',
                     warning: '#F59E0B',
                 },
                 fontFamily: {
                     display: ["'Plus Jakarta Sans'", "sans-serif"],
                     body: ["'Inter'", "sans-serif"],
-                    sans: ["'Inter'", "sans-serif"], 
                 },
                 borderRadius: {
-                    DEFAULT: "1rem",
-                    'xl': "1.5rem",
-                    '2xl': "2rem",
-                    '3xl': "2.5rem",
-                },
-                backgroundImage: {
-                    'sky-gradient': 'linear-gradient(180deg, #38BDF8 0%, #3B82F6 100%)',
-                    'night-gradient': 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
-                    'card-gradient': 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                    'xl': "1rem",
+                    '2xl': "1.5rem",
+                    '3xl': "2rem",
+                    '4xl': "2.5rem",
                 },
                 boxShadow: {
                     'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
-                    'card': '0 10px 40px -10px rgba(0, 0, 0, 0.08)',
-                    'float': '0 20px 40px -5px rgba(0, 0, 0, 0.1)',
-                    '3d': '0 6px 0 rgba(0,0,0,0.15)',
-                    '3d-hover': '0 4px 0 rgba(0,0,0,0.15)',
-                    '3d-active': '0 0 0 rgba(0,0,0,0.15)',
-                    'glow': '0 0 20px rgba(139, 92, 246, 0.3)',
+                    'card': '0 2px 10px rgba(0, 0, 0, 0.03)',
+                    'float': '0 10px 30px -5px rgba(0, 0, 0, 0.1)',
+                    'nav': '0 -4px 20px rgba(0,0,0,0.05)',
+                    'btn': '0 4px 0', // Solid shadow for 3D feel
+                },
+                spacing: {
+                    'safe-top': 'env(safe-area-inset-top)',
+                    'safe-bottom': 'env(safe-area-inset-bottom)',
                 }
             },
         },
@@ -64,53 +58,26 @@
     <style>
       body {
         -webkit-font-smoothing: antialiased;
-        min-height: max(884px, 100dvh);
+        -webkit-tap-highlight-color: transparent;
+        background-color: #F8FAFC;
+        overscroll-behavior-y: none; /* Prevent pull-to-refresh on mobile */
       }
       
-      /* 3D Button Utility */
-      .btn-3d {
-        transition: all 0.1s;
-        transform: translateY(0);
-        box-shadow: 0 6px 0 rgba(0,0,0,0.15);
-      }
-      .btn-3d:hover {
-        transform: translateY(2px);
-        box-shadow: 0 4px 0 rgba(0,0,0,0.15);
-      }
-      .btn-3d:active {
-        transform: translateY(6px);
-        box-shadow: 0 0 0 rgba(0,0,0,0);
-      }
-
-      /* Animations */
-      @keyframes float {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
-        100% { transform: translateY(0px); }
-      }
-      .animate-float { animation: float 6s ease-in-out infinite; }
+      /* Mobile Safe Areas */
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+      .pt-safe { padding-top: env(safe-area-inset-top); }
+      .mb-safe { margin-bottom: env(safe-area-inset-bottom); }
       
-      @keyframes float-cloud {
-        0% { transform: translateX(0); }
-        50% { transform: translateX(20px); }
-        100% { transform: translateX(0); }
-      }
-      .animate-cloud { animation: float-cloud 8s ease-in-out infinite; }
-
-      .dotted-path {
-        stroke: rgba(255, 255, 255, 0.5);
-        stroke-width: 8;
-        stroke-dasharray: 15, 15;
-        fill: none;
-        stroke-linecap: round;
-        filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
-      }
-
+      /* Custom Scrollbar hide */
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+      /* Button Active State for Mobile */
+      .active-scale:active {
+        transform: scale(0.96);
+      }
     </style>
     <script>
-      // Global process polyfill for browser compatibility
       window.process = { env: {} };
     </script>
 <script type="importmap">

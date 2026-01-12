@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ConversationScenario } from '../types';
 import { getChatReply, playTTS, stopTTS } from '../services/geminiService';
-import { useAuth } from '../context/AuthContext';
 import AudioVisualizer from './AudioVisualizer';
 
 interface ChatPracticeProps {
@@ -25,25 +24,22 @@ const ChatPractice: React.FC<ChatPracticeProps> = ({ scenario, userLevel }) => {
     const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const { user } = useAuth();
-
     // Initial Message
     useEffect(() => {
         if (messages.length === 0 && scenario.starter_message) {
             const initialMsg = { id: Date.now(), role: 'model' as const, text: scenario.starter_message };
             setMessages([initialMsg]);
-            playTTS(scenario.starter_message);
+            // Don't auto-play audio on mount to avoid annoying users
         }
     }, [scenario]);
 
     // Scroll to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+    }, [messages, isProcessing]);
 
     const handleSendMessage = async (text: string) => {
         if (!text.trim()) return;
-
         stopTTS();
         
         const userMsg: Message = { id: Date.now(), role: 'user', text };
@@ -76,11 +72,10 @@ const ChatPractice: React.FC<ChatPracticeProps> = ({ scenario, userLevel }) => {
 
     const startListening = () => {
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            alert("Tarayıcınız sesli yazdırmayı desteklemiyor.");
+            alert("Cihazınız sesli yazdırmayı desteklemiyor.");
             return;
         }
         
-        // Visualizer setup
         navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
             setAudioStream(stream);
         });
@@ -108,68 +103,58 @@ const ChatPractice: React.FC<ChatPracticeProps> = ({ scenario, userLevel }) => {
     };
 
     return (
-        <div className="flex flex-col h-[650px] bg-white rounded-[2.5rem] overflow-hidden border border-slate-100 relative shadow-2xl shadow-indigo-500/10">
+        <div className="flex flex-col h-[calc(100vh-180px)] md:h-[650px] bg-slate-50 rounded-3xl overflow-hidden border border-slate-200 relative">
+            
             {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-5 flex justify-between items-center z-10 relative overflow-hidden text-white">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full blur-3xl opacity-20 -mr-10 -mt-10"></div>
-                <div className="flex items-center gap-4 relative z-10">
-                    <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-3xl border-2 border-white/30 shadow-lg">
-                        👾
-                    </div>
-                    <div>
-                        <div className="font-bold text-lg leading-tight">{scenario.ai_role}</div>
-                        <div className="text-xs text-indigo-100 font-medium opacity-80 flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                            Çevrimiçi • {scenario.setting}
-                        </div>
-                    </div>
+            <div className="bg-white p-4 border-b border-slate-100 flex items-center gap-3 shrink-0">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-xl border border-primary/20">
+                    👾
+                </div>
+                <div className="flex-1">
+                    <div className="font-bold text-sm text-slate-900">{scenario.ai_role}</div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{scenario.setting}</div>
                 </div>
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#EFE7DD] bg-opacity-30">
                 {messages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        {msg.role === 'model' && (
-                             <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-lg mr-2 border border-indigo-200 flex-shrink-0 self-end mb-1">👾</div>
-                        )}
-                        <div className={`max-w-[75%] p-5 rounded-3xl relative transition-all duration-300 shadow-sm
+                        <div className={`max-w-[85%] p-3.5 rounded-2xl relative text-sm font-medium leading-relaxed shadow-sm
                             ${msg.role === 'user' 
-                                ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-br-none shadow-indigo-200' 
-                                : 'bg-white text-slate-700 border border-slate-100 rounded-bl-none shadow-sm'
+                                ? 'bg-primary text-white rounded-br-none' 
+                                : 'bg-white text-slate-800 rounded-bl-none'
                             }`}
                         >
-                            <p className="text-sm md:text-[15px] leading-relaxed font-medium">{msg.text}</p>
-                            
+                            {msg.text}
                             {msg.role === 'model' && (
-                                <button onClick={() => playTTS(msg.text)} className="absolute -right-12 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center bg-white rounded-full text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 shadow-sm transition-all border border-slate-100 group">
-                                    <span className="material-symbols-rounded text-xl group-hover:scale-110 transition-transform">volume_up</span>
+                                <button onClick={() => playTTS(msg.text)} className="absolute -right-8 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center bg-white/50 rounded-full text-slate-600 active:scale-90 transition-transform">
+                                    <span className="material-symbols-rounded text-sm">volume_up</span>
                                 </button>
                             )}
                         </div>
                     </div>
                 ))}
                 {isProcessing && (
-                    <div className="flex justify-start items-end">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-lg mr-2 border border-indigo-200 flex-shrink-0">👾</div>
-                        <div className="bg-white px-4 py-3 rounded-3xl rounded-bl-none border border-slate-100 shadow-sm flex gap-1.5 items-center">
-                            <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></span>
-                            <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-100"></span>
-                            <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-200"></span>
+                    <div className="flex justify-start">
+                        <div className="bg-white px-3 py-2 rounded-2xl rounded-bl-none shadow-sm flex gap-1 items-center">
+                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
+                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-100"></span>
+                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-200"></span>
                         </div>
                     </div>
                 )}
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Suggestions Overlay */}
+            {/* Suggestions */}
             {suggestions.length > 0 && !isProcessing && (
-                <div className="px-4 py-3 flex gap-3 overflow-x-auto no-scrollbar z-10 bg-slate-50 border-t border-slate-100">
+                <div className="px-3 py-2 flex gap-2 overflow-x-auto no-scrollbar bg-slate-50 border-t border-slate-100 shrink-0">
                     {suggestions.map((sug, idx) => (
                         <button 
                             key={idx}
                             onClick={() => handleSendMessage(sug)}
-                            className="whitespace-nowrap px-5 py-2.5 bg-white border-2 border-indigo-100 text-indigo-600 text-sm font-bold rounded-2xl hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-all shadow-sm flex-shrink-0 hover:-translate-y-0.5"
+                            className="whitespace-nowrap px-4 py-2 bg-white border border-primary/20 text-primary text-xs font-bold rounded-full active:bg-primary/10 transition-colors shadow-sm"
                         >
                             {sug}
                         </button>
@@ -178,12 +163,12 @@ const ChatPractice: React.FC<ChatPracticeProps> = ({ scenario, userLevel }) => {
             )}
 
             {/* Input Area */}
-            <div className="p-4 bg-white border-t border-slate-100 flex items-center gap-3 relative z-20">
+            <div className="p-3 bg-white border-t border-slate-100 flex items-center gap-2 shrink-0 pb-safe">
                 <button 
                     onClick={startListening}
-                    className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm border-2 ${isRecording ? 'bg-red-50 border-red-100 text-red-500 animate-pulse' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100'}`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${isRecording ? 'bg-red-50 text-red-500 animate-pulse' : 'bg-slate-100 text-slate-500 active:bg-slate-200'}`}
                 >
-                    <span className="material-symbols-rounded text-2xl">{isRecording ? 'mic_off' : 'mic'}</span>
+                    <span className="material-symbols-rounded text-xl">{isRecording ? 'mic_off' : 'mic'}</span>
                 </button>
 
                 <div className="flex-1 relative">
@@ -192,23 +177,22 @@ const ChatPractice: React.FC<ChatPracticeProps> = ({ scenario, userLevel }) => {
                         value={userInput}
                         onChange={(e) => setUserInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(userInput)}
-                        placeholder="Bir şeyler yaz..."
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3.5 pl-5 pr-14 text-slate-800 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder:text-slate-400"
+                        placeholder="Mesaj yaz..."
+                        className="w-full bg-slate-50 border-0 rounded-full py-2.5 pl-4 pr-10 text-slate-800 text-sm font-medium focus:ring-2 focus:ring-primary/20 placeholder:text-slate-400"
                     />
                     <button 
                         onClick={() => handleSendMessage(userInput)}
                         disabled={!userInput.trim()}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-indigo-600 text-white rounded-xl disabled:opacity-50 disabled:bg-slate-300 hover:bg-indigo-700 transition-all flex items-center justify-center shadow-lg shadow-indigo-500/30 hover:scale-105"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center disabled:opacity-50 disabled:bg-slate-300 active:scale-90 transition-transform"
                     >
-                        <span className="material-symbols-rounded text-xl">send</span>
+                        <span className="material-symbols-rounded text-sm">send</span>
                     </button>
                 </div>
             </div>
             
-             {/* Visualizer Overlay when recording */}
              {isRecording && (
-                <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md px-6 py-3 rounded-2xl z-30 flex flex-col items-center gap-2 shadow-2xl animate-in zoom-in-95 duration-200">
-                    <div className="text-white text-xs font-bold uppercase tracking-widest animate-pulse">Dinliyorum...</div>
+                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md px-4 py-2 rounded-xl z-30 flex items-center gap-2 shadow-2xl">
+                     <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                     <AudioVisualizer stream={audioStream} isRecording={isRecording} />
                 </div>
             )}
