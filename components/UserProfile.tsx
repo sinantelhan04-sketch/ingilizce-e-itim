@@ -2,23 +2,27 @@
 import React from 'react';
 import { User } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { ALL_BADGES } from '../data/badges';
 
 interface UserProfileProps {
   isOpen: boolean;
   onClose: () => void;
-  onChangeLevel: () => void; // New prop
+  onChangeLevel: () => void; 
+  onStartFlashcards: () => void;
   user: User | null;
   savedWordsCount: number;
   currentDay: number;
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, onChangeLevel, user, savedWordsCount, currentDay }) => {
+const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, onChangeLevel, onStartFlashcards, user, savedWordsCount, currentDay }) => {
   const { logout } = useAuth();
   
   if (!isOpen || !user) return null;
 
   // Calculate Progress Percentage (based on 30 days)
   const progressPercentage = Math.round((currentDay / 30) * 100);
+
+  const earnedBadges = user.badges || [];
 
   return (
     <div className="fixed inset-0 z-[130] flex items-end md:items-center justify-center md:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
@@ -112,7 +116,14 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, onChangeLeve
                     </div>
                 </div>
 
-                <div className="p-4 md:p-5 rounded-3xl md:rounded-[2rem] bg-amber-50 border border-amber-100 flex flex-col items-start gap-2">
+                <div className="p-4 md:p-5 rounded-3xl md:rounded-[2rem] bg-amber-50 border border-amber-100 flex flex-col items-start gap-2 relative group-2">
+                    <button 
+                        onClick={() => { onClose(); onStartFlashcards(); }}
+                        className="absolute top-2 right-2 px-3 py-1 bg-amber-500 text-white text-[10px] font-bold rounded-full shadow-sm hover:bg-amber-600 transition-colors flex items-center gap-1"
+                    >
+                        <span className="material-symbols-rounded text-xs">play_arrow</span>
+                        Çalış
+                    </button>
                     <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-white text-amber-600 flex items-center justify-center shadow-sm">
                         <span className="material-symbols-rounded text-lg md:text-xl">bookmark</span>
                     </div>
@@ -156,6 +167,47 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, onChangeLeve
                         <span>Başlangıç</span>
                         <span>Hedef: C1</span>
                     </div>
+                </div>
+            </div>
+
+            {/* Achievements Section */}
+            <div className="mt-8 md:mt-10">
+                <h3 className="text-xl md:text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                    <span className="material-symbols-rounded text-amber-500">military_tech</span>
+                    Başarılar
+                </h3>
+
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {ALL_BADGES.map((badge) => {
+                        const isEarned = earnedBadges.includes(badge.id);
+                        return (
+                            <div key={badge.id} className="flex flex-col items-center group relative">
+                                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center mb-2 transition-all duration-300 relative
+                                    ${isEarned ? `${badge.color} text-white shadow-lg` : 'bg-slate-100 text-slate-300 contrast-[0.8] grayscale'} 
+                                    hover:scale-110 cursor-help`}
+                                >
+                                    <span className="material-symbols-rounded text-2xl md:text-3xl">
+                                        {badge.icon}
+                                    </span>
+                                    {isEarned && (
+                                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center text-emerald-500 shadow-sm border border-slate-100">
+                                            <span className="material-symbols-rounded text-sm font-bold">check_circle</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <span className={`text-[10px] font-bold text-center leading-tight ${isEarned ? 'text-slate-700' : 'text-slate-400'}`}>
+                                    {badge.name}
+                                </span>
+
+                                {/* Tooltip */}
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 p-2 bg-slate-900 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-center shadow-xl">
+                                    <p className="font-bold mb-0.5">{badge.name}</p>
+                                    <p className="text-slate-400 leading-tight">{badge.description}</p>
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900"></div>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 

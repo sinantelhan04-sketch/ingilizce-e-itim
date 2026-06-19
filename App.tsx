@@ -13,9 +13,11 @@ import { ToastProvider, useToast } from './components/Toast';
 import ProgressMap from './components/ProgressMap';
 import LevelSelector from './components/LevelSelector';
 import UserProfile from './components/UserProfile';
+import FlashcardMode from './components/FlashcardMode';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { checkBadgeUnlocks, ALL_BADGES } from './data/badges';
 
-type ViewMode = 'MAP' | 'LESSON';
+type ViewMode = 'MAP' | 'LESSON' | 'FLASHCARDS';
 type LessonTab = 'VOCAB' | 'READ' | 'CHAT' | 'QUIZ';
 
 // --- API ERROR MODAL ---
@@ -108,7 +110,7 @@ const AppContent: React.FC = () => {
   const { addToast } = useToast();
   const { isAuthenticated, user, updateUser } = useAuth();
 
-  const [savedWords, setSavedWords] = useState<string[]>([]);
+  const [savedWords, setSavedWords] = useState<DailyLesson['target_words']>([]);
   const [isLevelSelectorOpen, setIsLevelSelectorOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
@@ -116,7 +118,17 @@ const AppContent: React.FC = () => {
     if (!isAuthenticated) return;
     const savedLevel = localStorage.getItem('yds_user_level');
     const savedWordsLocal = localStorage.getItem('yds_saved_words');
-    if (savedWordsLocal) setSavedWords(JSON.parse(savedWordsLocal));
+    if (savedWordsLocal) {
+        try {
+            const parsed = JSON.parse(savedWordsLocal);
+            // Migration: if it's string array, we might need to handle it.
+            // For now, we'll just clear or handle it later. 
+            // Better: assume it's Word array now.
+            setSavedWords(parsed);
+        } catch(e) {
+            setSavedWords([]);
+        }
+    }
     if (savedLevel) setUserLevel(savedLevel);
     else setIsLevelSelectorOpen(true);
   }, [isAuthenticated]);
@@ -124,6 +136,26 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated) localStorage.setItem('yds_saved_words', JSON.stringify(savedWords));
   }, [savedWords, isAuthenticated]);
+
+  // Badge Logic
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    
+    const currentBadges = user.badges || [];
+    const updatedBadges = checkBadgeUnlocks(user, savedWords.length, currentDay);
+    
+    if (updatedBadges.length > currentBadges.length) {
+      // Find what's new
+      const newBadgeId = updatedBadges.find(id => !currentBadges.includes(id));
+      const badge = ALL_BADGES.find(b => b.id === newBadgeId);
+      
+      if (badge) {
+        addToast(`Başarı Açıldı: ${badge.name}`, 'success');
+      }
+      
+      updateUser({ ...user, badges: updatedBadges });
+    }
+  }, [savedWords.length, currentDay, userLevel, isAuthenticated]);
 
   const handleLevelSelect = (level: string) => {
       setUserLevel(level);
@@ -135,9 +167,21 @@ const AppContent: React.FC = () => {
       addToast(`${level} seviyesi ayarlandı`, 'success');
   };
 
-  const toggleSaveWord = (word: string) => {
-    const lowerWord = word.toLowerCase();
-    setSavedWords(prev => prev.includes(lowerWord) ? prev.filter(w => w !== lowerWord) : [...prev, lowerWord]);
+  const toggleSaveWord = (wordObj: any) => {
+    // wordObj can be string (legacy) or Word object
+    const wordStr = typeof wordObj === 'string' ? wordObj : wordObj.word;
+    const lowerWord = wordStr.toLowerCase();
+    
+    setSavedWords(prev => {
+        const index = prev.findIndex(w => (typeof w === 'string' ? w : w.word).toLowerCase() === lowerWord);
+        if (index !== -1) {
+            return prev.filter((_, i) => i !== index);
+        } else {
+            // If it's a string, we might want to try and find the full object if available, 
+            // but usually this is called from VocabList with the full object.
+            return [...prev, wordObj];
+        }
+    });
   };
 
   const openLesson = async (day: number) => {
@@ -171,12 +215,29 @@ const AppContent: React.FC = () => {
       }
   };
 
+  const handleStartFlashcards = () => {
+    setViewMode('FLASHCARDS');
+    if (user && !user.badges?.includes('flashcard_pro')) {
+        const updatedBadges = [...(user.badges || []), 'flashcard_pro'];
+        updateUser({ ...user, badges: updatedBadges });
+        const badge = ALL_BADGES.find(b => b.id === 'flashcard_pro');
+        if (badge) addToast(`Başarı Açıldı: ${badge.name}`, 'success');
+    }
+  };
+
   if (apiKeyError) return <ApiKeyErrorModal isOpen={true} />;
   if (isLevelSelectorOpen || !userLevel) return <LevelSelector onSelect={handleLevelSelect} />;
 
   return (
     <div className="min-h-screen bg-surface flex flex-col font-display overflow-hidden">
         
+        {/* VIEW: FLASHCARDS */}
+        {viewMode === 'FLASHCARDS' && (
+            <FlashcardMode 
+                savedWords={savedWords} 
+                onClose={() => setViewMode('MAP')} 
+            />
+        )}
         {/* VIEW: MAP */}
         {viewMode === 'MAP' && (
             <>
@@ -192,6 +253,7 @@ const AppContent: React.FC = () => {
                     isOpen={isProfileOpen} 
                     onClose={() => setIsProfileOpen(false)}
                     onChangeLevel={() => setIsLevelSelectorOpen(true)}
+                    onStartFlashcards={handleStartFlashcards}
                     user={user} 
                     savedWordsCount={savedWords.length}
                     currentDay={currentDay}

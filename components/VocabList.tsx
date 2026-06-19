@@ -5,8 +5,8 @@ import { playTTS } from '../services/geminiService';
 
 interface VocabListProps {
   words: Word[];
-  savedWords: string[];
-  onToggleSave: (word: string) => void;
+  savedWords: any[]; // Changed from string[] to accommodate both for transition
+  onToggleSave: (word: any) => void;
 }
 
 const VocabList: React.FC<VocabListProps> = ({ words, savedWords, onToggleSave }) => {
@@ -20,7 +20,12 @@ const VocabList: React.FC<VocabListProps> = ({ words, savedWords, onToggleSave }
     finally { setTimeout(() => setPlayingWord(null), 1000); }
   };
 
-  const isSaved = (w: string) => savedWords.includes(w.toLowerCase());
+  const isSaved = (w: string) => {
+    return savedWords.some(sw => {
+        const swStr = typeof sw === 'string' ? sw : sw.word;
+        return swStr.toLowerCase() === w.toLowerCase();
+    });
+  };
 
   const getCardColor = (type: string) => {
       const t = type.toLowerCase();
@@ -63,7 +68,7 @@ const VocabList: React.FC<VocabListProps> = ({ words, savedWords, onToggleSave }
                             <span className="material-symbols-rounded text-xl">volume_up</span>
                         </button>
                         <button 
-                            onClick={() => onToggleSave(word.word)}
+                            onClick={() => onToggleSave(word)}
                             className={`w-10 h-10 rounded-full flex items-center justify-center shadow-sm active:scale-90 transition-transform ${isSaved(word.word) ? 'bg-warning text-white' : 'bg-white text-slate-300'}`}
                         >
                             <span className="material-symbols-rounded text-xl">bookmark</span>

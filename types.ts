@@ -70,6 +70,15 @@ export interface WritingAnalysisResult {
   better_version: string;
 }
 
+export interface Badge {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+  requirement: string;
+}
+
 export interface User {
   username: string;
   password?: string; 
@@ -80,4 +89,6 @@ export interface User {
   progress: number;
   isPremium?: boolean; 
   subscriptionDate?: string;
+  badges?: string[]; // Array of badge IDs
+  completedDays?: number[]; // Days already finished
 }

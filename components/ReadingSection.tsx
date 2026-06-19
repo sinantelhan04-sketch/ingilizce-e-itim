@@ -8,8 +8,8 @@ import { useToast } from './Toast';
 interface ReadingSectionProps {
   passage: string;
   words: Word[];
-  savedWords: string[];
-  onToggleSave: (word: string) => void;
+  savedWords: any[];
+  onToggleSave: (word: any) => void;
 }
 
 interface QuickDef {
@@ -224,7 +224,12 @@ const ReadingSection: React.FC<ReadingSectionProps> = ({ passage, words, savedWo
      ));
   };
 
-  const isSaved = (w: string) => savedWords.includes(w.toLowerCase());
+  const isSaved = (w: string) => {
+    return savedWords.some(sw => {
+        const swStr = typeof sw === 'string' ? sw : sw.word;
+        return swStr.toLowerCase() === w.toLowerCase();
+    });
+  };
 
   return (
     <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-12 shadow-dribbble relative overflow-hidden">
