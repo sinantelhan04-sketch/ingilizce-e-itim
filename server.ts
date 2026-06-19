@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 async function startServer() {
   const app = express();
@@ -9,12 +8,20 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
-  // Gemini Setup
-  const genAI = new GoogleGenAI(process.env.GEMINI_API_KEY || "");
-  
+  // Health check for deployment
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // API Routes
   app.post("/api/gemini", async (req, res) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Gemini API key is not configured on the server." });
+    }
+    
     try {
+      const genAI = new GoogleGenerativeAI(apiKey);
       const { method, args } = req.body;
       const modelName = args.model || "gemini-3-flash-preview";
       const model = genAI.getGenerativeModel({ model: modelName });
@@ -39,10 +46,8 @@ async function startServer() {
           { text: prompt }
         ]);
         result = { text: genResult.response.text() };
-      } else if (method === "generateImages") {
-        // Fallback for image generation if requested, 
-        // Note:Imagen model handling might differ - simpler to respond with content if standard
-        const genResult = await model.generateContent(args.prompt);
+      } else {
+        const genResult = await model.generateContent(args.prompt || args.contents || "Hello");
         result = { text: genResult.response.text() };
       }
 
@@ -55,6 +60,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -69,7 +75,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
   });
 }
 
