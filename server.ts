@@ -1,12 +1,23 @@
 import express from "express";
 import path from "path";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json({ limit: '10mb' }));
+
+  // Shared Gemini client setup
+  const apiKey = process.env.GEMINI_API_KEY;
+  const ai = apiKey ? new GoogleGenAI({
+    apiKey: apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  }) : null;
 
   // Health check for deployment
   app.get("/api/health", (req, res) => {
@@ -15,45 +26,73 @@ async function startServer() {
 
   // API Routes
   app.post("/api/gemini", async (req, res) => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    if (!ai) {
       return res.status(500).json({ error: "Gemini API key is not configured on the server." });
     }
     
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
       const { method, args } = req.body;
-      const modelName = args.model || "gemini-3-flash-preview";
-      const model = genAI.getGenerativeModel({ model: modelName });
+      const modelName = args.model || "gemini-3.5-flash";
 
       let result;
       if (method === "generateContent") {
-        const genResult = await model.generateContent(args.contents);
-        result = { text: genResult.response.text() };
+        const genResult = await ai.models.generateContent({
+          model: modelName,
+          contents: args.contents || args.prompt || "Hello"
+        });
+        
+        // Handle images if any
+        let imageUrl = undefined;
+        if (genResult.candidates?.[0]?.content?.parts) {
+          for (const part of genResult.candidates[0].content.parts) {
+            if (part.inlineData) {
+              imageUrl = `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+              break;
+            }
+          }
+        }
+        
+        result = { text: genResult.text, imageUrl };
       } else if (method === "generateContentWithSchema") {
-        const genResult = await model.generateContent({
-           contents: [{ role: 'user', parts: [{ text: args.prompt }] }],
-           generationConfig: {
+        const genResult = await ai.models.generateContent({
+           model: modelName,
+           contents: args.prompt,
+           config: {
              responseMimeType: "application/json",
              responseSchema: args.schema,
            }
         });
-        result = { text: genResult.response.text() };
+        result = { text: genResult.text };
       } else if (method === "analyzeAudio") {
         const { audioBase64, mimeType, prompt } = args;
-        const genResult = await model.generateContent([
-          { inlineData: { mimeType, data: audioBase64 } },
-          { text: prompt }
-        ]);
-        result = { text: genResult.response.text() };
+        const genResult = await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            { inlineData: { mimeType, data: audioBase64 } },
+            { text: prompt }
+          ]
+        });
+        result = { text: genResult.text };
       } else {
-        const genResult = await model.generateContent(args.prompt || args.contents || "Hello");
-        result = { text: genResult.response.text() };
+        const genResult = await ai.models.generateContent({
+          model: modelName,
+          contents: args.prompt || args.contents || "Hello"
+        });
+        result = { text: genResult.text };
       }
 
       res.json(result);
     } catch (error: any) {
       console.error("Gemini API Error:", error);
+      
+      // Handle rate limits / quota issues
+      if (error.message?.includes("429") || error.status === 429) {
+        return res.status(429).json({ 
+          error: "API Quota exceeded. Please try again later.",
+          detail: error.message 
+        });
+      }
+      
       res.status(500).json({ error: error.message });
     }
   });

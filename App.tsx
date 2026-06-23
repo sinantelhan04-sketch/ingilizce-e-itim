@@ -205,8 +205,11 @@ const AppContent: React.FC = () => {
             console.error("Lesson Loading Error:", err);
             if (err.message === "MISSING_API_KEY" || err.message === "INVALID_API_KEY" || err.message.includes("API key")) {
                 setApiKeyError(true);
+            } else if (err.message === "QUOTA_EXCEEDED" || err.message.toLocaleLowerCase().includes("quota") || err.message.includes("429")) {
+                addToast("Günlük API kotası doldu. Lütfen bir süre sonra tekrar deneyin.", 'error');
+                setViewMode('MAP');
             } else {
-                addToast("Bağlantı hatası oluştu.", 'error');
+                addToast("Ders yüklenirken bir sorun oluştu.", 'error');
                 setViewMode('MAP'); 
             }
         } finally {

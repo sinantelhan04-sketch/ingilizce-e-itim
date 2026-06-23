@@ -1,23 +1,33 @@
 import { DailyLesson, AnalysisResult, Word, Exercise, WritingAnalysisResult } from "../types";
 
-const LESSON_MODEL = "gemini-3-flash-preview";
-const AUDIO_MODEL = "gemini-3-flash-preview"; 
-const TTS_MODEL = "gemini-2.5-flash-preview-tts";
+const LESSON_MODEL = "gemini-3.5-flash";
+const AUDIO_MODEL = "gemini-3.5-flash"; 
+const TTS_MODEL = "gemini-3.1-flash-tts-preview";
 const IMAGE_MODEL = "gemini-2.5-flash-image";
 
 const CACHE_VERSION = "v3_mondly_emoji";
 
 const callBackendGemini = async (method: string, args: any) => {
-  const response = await fetch("/api/gemini", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ method, args })
-  });
-  if (!response.ok) {
-    const errData = await response.json();
-    throw new Error(errData.error || "API_ERROR");
+  try {
+    const response = await fetch("/api/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ method, args })
+    });
+    
+    if (!response.ok) {
+      if (response.status === 429) {
+        throw new Error("API_QUOTA_EXCEEDED");
+      }
+      const errData = await response.json();
+      throw new Error(errData.error || "API_ERROR");
+    }
+    return await response.json();
+  } catch (error: any) {
+    if (error.message === "API_QUOTA_EXCEEDED") throw error;
+    console.error("Backend Call Failed:", error);
+    throw error;
   }
-  return await response.json();
 };
 
 export const generateLesson = async (day: number, userLevel: string = "A1"): Promise<DailyLesson> => {
@@ -151,6 +161,9 @@ export const generateLesson = async (day: number, userLevel: string = "A1"): Pro
     if (error.message.includes("403") || error.message.includes("API key")) {
         throw new Error("INVALID_API_KEY");
     }
+    if (error.message === "API_QUOTA_EXCEEDED") {
+        throw new Error("QUOTA_EXCEEDED");
+    }
     throw error;
   }
 };
@@ -186,9 +199,10 @@ export const generateThemeImage = async (theme: string): Promise<string | undefi
       contents: prompt, 
       model: IMAGE_MODEL 
     });
-    return undefined; 
+    return result.imageUrl; 
   } catch (error) {
-    return undefined;
+    console.warn("Image generation failed:", error);
+    return undefined; 
   }
 };
 
