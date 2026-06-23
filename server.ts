@@ -32,7 +32,7 @@ async function startServer() {
     
     try {
       const { method, args } = req.body;
-      const modelName = args.model || "gemini-2.0-flash";
+      const modelName = args.model || "gemini-1.5-flash";
 
       let result;
       if (method === "generateContent") {
@@ -75,7 +75,7 @@ async function startServer() {
         result = { text: genResult.text };
       } else if (method === "generateImages") {
         // Use a dedicated image model if requested, or fallback to current
-        const imgModel = modelName.includes("image") ? modelName : "gemini-2.0-flash";
+        const imgModel = modelName.includes("image") ? modelName : "gemini-1.5-flash";
         const genResult = await ai.models.generateContent({
           model: imgModel,
           contents: args.prompt,
