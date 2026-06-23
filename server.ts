@@ -32,7 +32,7 @@ async function startServer() {
     
     try {
       const { method, args } = req.body;
-      const modelName = args.model || "gemini-3.5-flash";
+      const modelName = args.model || "gemini-2.0-flash";
 
       let result;
       if (method === "generateContent") {
@@ -73,6 +73,27 @@ async function startServer() {
           ]
         });
         result = { text: genResult.text };
+      } else if (method === "generateImages") {
+        // Use a dedicated image model if requested, or fallback to current
+        const imgModel = modelName.includes("image") ? modelName : "gemini-2.0-flash";
+        const genResult = await ai.models.generateContent({
+          model: imgModel,
+          contents: args.prompt,
+          config: {
+            // For older model compatibility if needed, but generateContent is preferred
+          }
+        });
+        
+        let imageUrl = undefined;
+        if (genResult.candidates?.[0]?.content?.parts) {
+          for (const part of genResult.candidates[0].content.parts) {
+            if (part.inlineData) {
+              imageUrl = `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+              break;
+            }
+          }
+        }
+        result = { text: genResult.text, imageUrl };
       } else {
         const genResult = await ai.models.generateContent({
           model: modelName,

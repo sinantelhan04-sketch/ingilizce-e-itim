@@ -1,9 +1,9 @@
 import { DailyLesson, AnalysisResult, Word, Exercise, WritingAnalysisResult } from "../types";
 
-const LESSON_MODEL = "gemini-3.5-flash";
-const AUDIO_MODEL = "gemini-3.5-flash"; 
-const TTS_MODEL = "gemini-3.1-flash-tts-preview";
-const IMAGE_MODEL = "gemini-2.5-flash-image";
+const LESSON_MODEL = "gemini-2.0-flash";
+const AUDIO_MODEL = "gemini-2.0-flash"; 
+const TTS_MODEL = "gemini-2.0-flash";
+const IMAGE_MODEL = "gemini-2.0-flash";
 
 const CACHE_VERSION = "v3_mondly_emoji";
 
@@ -193,17 +193,8 @@ export const getChatReply = async (history: {role: string, parts: {text: string}
 };
 
 export const generateThemeImage = async (theme: string): Promise<string | undefined> => {
-  const prompt = `Cute 3D cartoon illustration: "${theme}". Mondly style, vibrant colors, white background.`;
-  try {
-    const result = await callBackendGemini("generateContent", { 
-      contents: prompt, 
-      model: IMAGE_MODEL 
-    });
-    return result.imageUrl; 
-  } catch (error) {
-    console.warn("Image generation failed:", error);
-    return undefined; 
-  }
+  // Disabling image generation calls temporarily due to widespread quota limits (limit: 0) on experimental image models
+  return undefined; 
 };
 
 export const regeneratePassage = async (currentTheme: string, words: Word[], userLevel: string = "A1"): Promise<{ reading_passage: string, exercises: Exercise[] }> => {
