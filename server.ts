@@ -106,15 +106,32 @@ async function startServer() {
     } catch (error: any) {
       console.error("Gemini API Error:", error);
       
+      const errorMessage = error.message || "";
+      const errorDetail = error.details || error.status || "";
+
+      // Handle specific Google API error statuses/messages
+      if (errorMessage.includes("API key not valid") || errorMessage.includes("API_KEY_INVALID") || errorMessage.includes("API key expired")) {
+        return res.status(401).json({ 
+          error: "INVALID_API_KEY",
+          message: "API anahtarı geçersiz veya süresi dolmuş. Lütfen AI Studio Ayarlarından API anahtarınızı kontrol edin.",
+          detail: errorMessage
+        });
+      }
+
       // Handle rate limits / quota issues
-      if (error.message?.includes("429") || error.status === 429) {
+      if (errorMessage.includes("429") || error.status === 429 || errorMessage.includes("quota")) {
         return res.status(429).json({ 
-          error: "API Quota exceeded. Please try again later.",
-          detail: error.message 
+          error: "QUOTA_EXCEEDED",
+          message: "API kotası doldu. Lütfen daha sonra tekrar deneyin.",
+          detail: errorMessage 
         });
       }
       
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ 
+        error: "SERVER_ERROR",
+        message: "Beklenmedik bir hata oluştu.",
+        detail: errorMessage 
+      });
     }
   });
 

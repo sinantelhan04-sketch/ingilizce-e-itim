@@ -25,15 +25,21 @@ const ApiKeyErrorModal = ({ isOpen }: { isOpen: boolean }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/90 backdrop-blur-md p-6 animate-in fade-in duration-300">
-            <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
-                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="material-symbols-rounded text-3xl text-red-500">key_off</span>
+            <div className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl text-center">
+                <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <span className="material-symbols-rounded text-4xl text-red-500">key_off</span>
                 </div>
-                <h2 className="text-xl font-black text-slate-900 mb-2">API Anahtarı Eksik</h2>
-                <p className="text-sm text-slate-500 mb-6">Uygulamanın çalışması için API anahtarı gereklidir.</p>
-                <button onClick={() => window.location.reload()} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl active-scale transition-transform">
-                    Yenile
-                </button>
+                <h2 className="text-2xl font-black text-slate-900 mb-3">API Anahtarı Geçersiz</h2>
+                <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                    Gemini API anahtarınız eksik, geçersiz veya süresi dolmuş. <br/>
+                    <strong className="text-slate-700">Çözüm:</strong> AI Studio Ayarlar menüsünden geçerli bir API anahtarı ekleyin ve uygulamayı yeniden başlatın.
+                </p>
+                <div className="space-y-3">
+                    <button onClick={() => window.location.reload()} className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl active-scale transition-transform shadow-lg shadow-slate-200">
+                        Sayfayı Yenile
+                    </button>
+                    <p className="text-[10px] text-slate-400">Not: Yayınlanmış sitelerde environment variable (GEMINI_API_KEY) ayarlandığından emin olun.</p>
+                </div>
             </div>
         </div>
     );

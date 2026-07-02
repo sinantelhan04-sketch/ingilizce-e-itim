@@ -16,15 +16,18 @@ const callBackendGemini = async (method: string, args: any) => {
     });
     
     if (!response.ok) {
-      if (response.status === 429) {
-        throw new Error("API_QUOTA_EXCEEDED");
+      const errData = await response.json().catch(() => ({ error: "FETCH_ERROR" }));
+      if (response.status === 429 || errData.error === "QUOTA_EXCEEDED") {
+        throw new Error("QUOTA_EXCEEDED");
       }
-      const errData = await response.json();
+      if (response.status === 401 || errData.error === "INVALID_API_KEY") {
+        throw new Error("INVALID_API_KEY");
+      }
       throw new Error(errData.error || "API_ERROR");
     }
     return await response.json();
   } catch (error: any) {
-    if (error.message === "API_QUOTA_EXCEEDED") throw error;
+    if (error.message === "QUOTA_EXCEEDED" || error.message === "INVALID_API_KEY") throw error;
     console.error("Backend Call Failed:", error);
     throw error;
   }
